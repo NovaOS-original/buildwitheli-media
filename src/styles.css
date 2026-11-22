@@ -11,3 +11,18 @@
 
 .story-video{width:100%;aspect-ratio:16/9;margin:1.5rem 0;border-radius:18px;overflow:hidden;background:#05070b;border:1px solid rgba(255,255,255,.1)}
 .story-video iframe{display:block;width:100%;height:100%;border:0}
+
+
+/* Creator approval and platform notices */
+.approval-banner{margin:20px 0;padding:20px 22px;border:1px solid #c6f36b55;border-radius:10px;background:linear-gradient(110deg,#c6f36b12,#ffffff05)}
+.approval-banner b{color:#c6f36b;font-size:13px;letter-spacing:.08em;text-transform:uppercase}
+.approval-banner p{margin:9px 0 0;color:#b6c0c8;font-size:12px;line-height:1.7}
+.announcement{margin:18px 0 0;padding:14px 18px;border:1px solid #c6f36b44;border-radius:8px;background:#c6f36b0d;color:#dce8cd;font-size:12px;line-height:1.7}
+.announcement b{color:#c6f36b}
+.announcement-row{padding:15px 0;border-bottom:1px solid #ffffff18}
+.announcement-row p{color:#aab3bc;font-size:12px;line-height:1.6}
+.announcement-row small{color:#7f8a97;font-size:10px}
+.auth label{display:block;color:#c3cad1;font-size:11px;margin:14px 0}
+.auth input{display:block;width:100%;height:45px;margin-top:8px;padding:0 12px;border:1px solid #ffffff25;border-radius:6px;background:#080d15;color:#fff;font:inherit}
+.top nav button.quiet{background:none;border:0;color:inherit;font:inherit;font-size:12px;cursor:pointer;padding:5px 0}
+.top nav button.quiet:hover{color:#c6f36b}
