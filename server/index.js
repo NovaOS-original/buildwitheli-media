@@ -31,11 +31,11 @@ const profileSchema=z.object({displayName:z.string().trim().min(2).max(60),bio:z
 
 app.get('/api/health',(_req,res)=>res.json({ok:true,service:'buildwitheli-media-api'}));
 app.get('/api/public/posts',async(req,res)=>{
-  try{const category=String(req.query.category||'').trim().slice(0,40);const snap=await db().collection('posts').where('status','==','PUBLISHED').orderBy('publishedAt','desc').limit(500).get();const published=snap.docs.map(cleanDoc);res.json({posts:(category?published.filter(p=>p.category===category):published).slice(0,60)});}
+  try{const category=String(req.query.category||'').trim().slice(0,40);const snap=await db().collection('posts').where('status','==','PUBLISHED').limit(500).get();const published=snap.docs.map(cleanDoc).sort((a,b)=>String(b.publishedAt||'').localeCompare(String(a.publishedAt||'')));res.json({posts:(category?published.filter(p=>p.category===category):published).slice(0,60)});}
   catch(e){console.error(e);res.status(503).json({error:'Content feed is not configured.'});}
 });
 app.get('/api/public/posts/:id',async(req,res)=>{
-  try{let snap=await db().collection('posts').doc(req.params.id).get();if(!snap.exists){const found=await db().collection('posts').where('slug','==',req.params.id).where('status','==','PUBLISHED').limit(1).get();if(found.empty)return res.sendStatus(404);snap=found.docs[0];}if(snap.data().status!=='PUBLISHED')return res.sendStatus(404);res.json({post:cleanDoc(snap)});}
+  try{let snap=await db().collection('posts').doc(req.params.id).get();if(!snap.exists){const found=await db().collection('posts').where('slug','==',req.params.id).limit(1).get();if(found.empty)return res.sendStatus(404);snap=found.docs[0];}if(snap.data().status!=='PUBLISHED')return res.sendStatus(404);res.json({post:cleanDoc(snap)});}
   catch(e){console.error(e);res.status(503).json({error:'Story is unavailable.'});}
 });
 app.get('/api/public/categories',async(_req,res)=>{
@@ -44,7 +44,7 @@ app.get('/api/public/categories',async(_req,res)=>{
 });
 app.get('/sitemap.xml',async(_req,res)=>{
   const base=(process.env.APP_ORIGIN||'https://YOUR_PUBLIC_DOMAIN').split(',')[0].replace(/\/$/,'');
-  try{const snap=await db().collection('posts').where('status','==','PUBLISHED').orderBy('publishedAt','desc').limit(1000).get();const urls=[base+'/',...snap.docs.map(d=>base+'/story/'+encodeURIComponent(d.data().slug||d.id))];const xml='<?xml version="1.0" encoding="UTF-8"?>'+'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+urls.map(url=>'<url><loc>'+url.replaceAll('&','&amp;').replaceAll('<','&lt;')+'</loc></url>').join('')+'</urlset>';res.type('application/xml').send(xml);}
+  try{const snap=await db().collection('posts').where('status','==','PUBLISHED').limit(1000).get();const docs=snap.docs.sort((a,b)=>String(timestamp(b.data().publishedAt)||'').localeCompare(String(timestamp(a.data().publishedAt)||'')));const urls=[base+'/',...docs.map(d=>base+'/story/'+encodeURIComponent(d.data().slug||d.id))];const xml='<?xml version="1.0" encoding="UTF-8"?>'+'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+urls.map(url=>'<url><loc>'+url.replaceAll('&','&amp;').replaceAll('<','&lt;')+'</loc></url>').join('')+'</urlset>';res.type('application/xml').send(xml);}
   catch(e){console.error(e);res.status(503).type('text/plain').send('Sitemap temporarily unavailable');}
 });
 app.get('/api/me',requireUser,async(req,res)=>{
@@ -168,8 +168,8 @@ if(process.env.NODE_ENV==='production'){
   const htmlEscape=value=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'","&#39;");
   app.get('/story/:slug',async(req,res,next)=>{
     try{
-      const found=await db().collection('posts').where('slug','==',req.params.slug).where('status','==','PUBLISHED').limit(1).get();
-      if(found.empty)return res.status(404).send('Story not found');
+      const found=await db().collection('posts').where('slug','==',req.params.slug).limit(1).get();
+      if(found.empty||found.docs[0].data().status!=='PUBLISHED')return res.status(404).send('Story not found');
       const post=cleanDoc(found.docs[0]),base=(process.env.APP_ORIGIN||'https://YOUR_PUBLIC_DOMAIN').split(',')[0].replace(/\/$/,'');
       const canonical=base+'/story/'+encodeURIComponent(post.slug||found.docs[0].id);
       const description=String(post.excerpt||post.body||'').replace(/\s+/g,' ').slice(0,250);
