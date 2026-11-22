@@ -38,3 +38,9 @@
 /* Preserve uploaded media exactly: no cropping, stretching, or forced aspect ratio */
 .post-cover{height:auto;max-height:420px;aspect-ratio:auto;object-fit:contain;background:#111722}
 .story-hero-image{height:auto;max-height: none;aspect-ratio:auto;object-fit:contain;background:transparent}
+
+/* Improve contrast on neutral secondary buttons */
+.btn.outline{background:#e9edf2;color:#111827;border-color:#cbd5e1}
+.btn.outline:hover{background:#fff;color:#111827;border-color:#fff}
+.small-action{background:#e9edf2;color:#111827;border-color:#cbd5e1}
+.small-action:hover{background:#c6f36b;color:#10150d;border-color:#c6f36b}
