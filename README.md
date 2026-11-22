@@ -4,6 +4,8 @@ A creator-led publishing platform for approved blog articles and externally host
 
 ## Current implementation
 
+> **Migration note (2026-11-22):** The live codebase still uses Firebase for authentication and Firestore until the Supabase runtime cutover is completed. The Nova Supabase project now has isolated `bwm_*` tables and a dedicated `bwm-creator-media` bucket provisioned. See [the Supabase migration plan](docs/SUPABASE-MIGRATION.md). Do not remove Firebase configuration or switch production traffic yet.
+
 - Firebase email/password registration, login, verification and password reset.
 - Creator workspace for profile editing, subscription status, article/vlog submission, submission tracking and payment history.
 - GH₵ subscription checkout initialized server-side through Paystack; only a signed webhook followed by a server-side transaction verification can activate membership.
