@@ -20,7 +20,7 @@ The Vite app runs at http://localhost:5173 and the API at http://localhost:4000.
 3. Create a Firestore database.
 4. Register a Web App and copy its public web config to the VITE_FIREBASE_* variables.
 5. Create a service account for the API. Keep its private key outside source control and set FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL and FIREBASE_PRIVATE_KEY in the server environment.
-6. Create the owner user through Firebase Authentication, verify the email, then set OWNER_FIREBASE_UID to that account's immutable Firebase UID. Do not use an email address as the authorization key.
+6. Create the owner user through Firebase Authentication, verify the email, then set both OWNER_FIREBASE_UID and VITE_OWNER_FIREBASE_UID to that account's immutable Firebase UID. The VITE value only controls whether the admin navigation is displayed; every admin API independently checks OWNER_FIREBASE_UID on the server. Do not use an email address as the authorization key.
 7. Replace REPLACE_WITH_OWNER_FIREBASE_UID in firestore.rules with the same UID and deploy the rules.
 
 ## 4. Paystack test mode
@@ -28,7 +28,7 @@ The Vite app runs at http://localhost:5173 and the API at http://localhost:4000.
 2. Set PAYSTACK_SECRET_KEY and PAYSTACK_PUBLIC_KEY in the server environment.
 3. Configure the webhook URL as https://YOUR_API_DOMAIN/api/payments/webhook.
 4. Set the webhook signing secret to the Paystack secret key in the API environment. The server validates the x-paystack-signature HMAC and then independently verifies each successful charge with Paystack.
-5. Set APP_ORIGIN and API_ORIGIN to the correct local or deployed origins.
+5. Set APP_ORIGIN to the correct web origin and VITE_API_ORIGIN to the API origin (use http://localhost:4000 locally).
 6. Test with Paystack's published test payment methods. Never ask for or store a Mobile Money PIN.
 7. A subscription is written only after the server-side transaction verification succeeds and matches the stored user, amount and currency.
 
@@ -41,10 +41,10 @@ The Node server serves the Vite build in production. Keep the API and web app on
 
 ## Important launch checklist
 - Configure Firebase Authentication, Firestore and a real owner UID.
-- Add server-side profile creation and full creator dashboard workflows.
-- Add media upload using Firebase Storage with file type/size validation and private pending assets.
-- Add admin moderation queues, user suspension, featured content, categories, announcements and audit logs.
-- Add payment return verification UI and subscription status/history UI.
+- Creator workspace now includes profile editing, membership status, submission form, submission status and payment history.
+- Super Admin API/UI now includes moderation, user suspension/restoration, transactions, revenue analytics, featured content, subscription pricing, announcements and transaction CSV export.
+- Media upload using Firebase Storage with file type/size validation and private pending assets is still outstanding.
+- Payment status is verified by the signed server webhook; a dedicated payment-return status page and automated expiry/refund/chargeback workflows are still outstanding.
 - Add idempotency, webhook replay protection, subscription expiry jobs, refund/chargeback handling and operational alerts.
 - Implement dynamic sitemap, canonical URLs, per-article metadata and Article/VideoObject JSON-LD for approved content. The current Vite SPA metadata is only a starter and does not yet provide full SSR.
 - Add privacy, terms, contact and editorial policy pages.
