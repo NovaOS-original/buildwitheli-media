@@ -18,7 +18,7 @@ The Vite app runs at http://localhost:5173 and the API at http://localhost:4000.
 1. Create a Firebase project.
 2. Enable Email/Password in Authentication.
 3. Create a Firestore database.
-4. Register a Web App and copy its public web config to the VITE_FIREBASE_* variables.
+4. Register a Web App and copy its public web config to the VITE_FIREBASE_* variables. The project ID is `buildwitheli-media` and the project number / messaging sender ID is `973033606621`; the app ID and API key must come from the Web App config.
 5. Create a service account for the API. Keep its private key outside source control and set FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL and FIREBASE_PRIVATE_KEY in the server environment.
 6. Create the owner user through Firebase Authentication, verify the email, then set both OWNER_FIREBASE_UID and VITE_OWNER_FIREBASE_UID to that account's immutable Firebase UID. The VITE value only controls whether the admin navigation is displayed; every admin API independently checks OWNER_FIREBASE_UID on the server. Do not use an email address as the authorization key.
 7. Replace REPLACE_WITH_OWNER_FIREBASE_UID in firestore.rules with the same UID and deploy the rules.
