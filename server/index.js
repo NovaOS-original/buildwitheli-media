@@ -56,6 +56,12 @@ app.get('/api/payments/history',requireUser,async(req,res)=>{
   try{const snap=await db().collection('transactions').where('uid','==',req.user.uid).limit(100).get();res.json({transactions:snap.docs.map(cleanDoc).sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')))});}
   catch{res.status(503).json({error:'Payment history is unavailable.'});}
 });
+app.get('/api/payments/status/:reference',requireUser,async(req,res)=>{
+  const reference=String(req.params.reference||'');
+  if(!/^bwm_[a-f0-9]{32}$/i.test(reference))return res.status(400).json({error:'Invalid payment reference.'});
+  try{const snap=await db().collection('transactions').doc(reference).get();if(!snap.exists||snap.data().uid!==req.user.uid)return res.sendStatus(404);const data=snap.data();res.json({reference,status:data.status,verifiedAt:timestamp(data.verifiedAt)});}
+  catch{res.status(503).json({error:'Payment status is unavailable.'});}
+});
 app.post('/api/payments/initialize',requireUser,async(req,res)=>{
   if(!req.user.email_verified)return res.status(403).json({error:'Verify your email before subscribing.'});
   if(!process.env.PAYSTACK_SECRET_KEY)return res.status(503).json({error:'Paystack is not configured.'});
