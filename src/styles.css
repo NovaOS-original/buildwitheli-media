@@ -34,3 +34,7 @@
 .story-hero-image{display:block;aspect-ratio:16/9;background:#111722}
 .auth-resend{display:block;margin:14px auto 0;padding:5px 0;border:0;background:transparent;color:#aebd9a;font:inherit;font-size:11px;text-decoration:underline;cursor:pointer}
 .auth-resend:disabled{opacity:.55;cursor:wait}
+
+/* Preserve uploaded media exactly: no cropping, stretching, or forced aspect ratio */
+.post-cover{height:auto;max-height:420px;aspect-ratio:auto;object-fit:contain;background:#111722}
+.story-hero-image{height:auto;max-height: none;aspect-ratio:auto;object-fit:contain;background:transparent}
