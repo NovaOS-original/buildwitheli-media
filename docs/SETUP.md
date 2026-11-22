@@ -62,3 +62,11 @@ Never commit .env, Firebase service account files, private keys, or Paystack sec
 3. Deploy the repository's `storage.rules` file using the Firebase CLI: `firebase deploy --only storage` after selecting the correct Firebase project.
 4. Creator submissions can upload JPG, PNG or WebP cover images up to 8 MB. Storage rules allow public reads and authenticated writes only inside the uploader's own UID folder. Do not weaken these rules to allow anonymous uploads.
 5. Test with a non-owner creator account before enabling production uploads. Deleting a post does not yet automatically delete its stored image; media cleanup remains a future task.
+
+
+## Public stories, categories and sitemap
+
+- Approved articles and vlogs are available through public story pages at `/story/{slug}`. Pending and rejected submissions are never returned by the public detail endpoint.
+- Category filters are generated from published content. The public API exposes `/api/public/categories` and supports category filtering on `/api/public/posts`.
+- The Node API generates `/sitemap.xml` from the homepage and up to 1,000 currently published stories. Set `APP_ORIGIN` to the canonical public website origin (not the API host if they differ) so sitemap URLs are correct.
+- Before launch, replace `YOUR_PUBLIC_DOMAIN` in `public/robots.txt` with the canonical HTTPS domain and submit `/sitemap.xml` in Google Search Console. The story view currently updates title and description client-side; this is not server-side rendering, so rich crawler previews are not guaranteed. SSR or prerendering and per-story Open Graph/Article JSON-LD remain follow-up SEO work.
