@@ -17,3 +17,6 @@ test('Firebase Storage rules scope uploads to the authenticated creator UID and 
 
 test('public story, categories and sitemap endpoints are defined',async()=>{const source=await readFile(new URL('./index.js',import.meta.url),'utf8');assert.match(source,/\/api\/public\/posts\/:id/);assert.match(source,/\/api\/public\/categories/);assert.match(source,/\/sitemap\.xml/);});
 test('published submissions receive stable readable slugs',async()=>{const source=await readFile(new URL('./index.js',import.meta.url),'utf8');assert.match(source,/const slug=parsed\.data\.title\.toLowerCase\(\)/);});
+
+test('admin category management is owner protected and persists category settings',async()=>{const source=await readFile(new URL('./index.js',import.meta.url),'utf8');assert.match(source,/app\.put\('\/api\/admin\/categories',requireUser,requireOwner/);assert.match(source,/CATEGORIES_UPDATED/);});
+test('admin dashboard exposes bounded audit and moderation history',async()=>{const source=await readFile(new URL('./index.js',import.meta.url),'utf8');assert.match(source,/collection\('adminAudit'\)\.orderBy\('createdAt','desc'\)\.limit\(100\)/);assert.match(source,/kind:'MODERATION'/);});
