@@ -16,7 +16,7 @@ services:
       - key: VITE_API_ORIGIN
         value: ""
       - key: FIREBASE_PROJECT_ID
-        sync: false
+        value: buildwitheli-media
       - key: FIREBASE_CLIENT_EMAIL
         sync: false
       - key: FIREBASE_PRIVATE_KEY
@@ -24,11 +24,13 @@ services:
       - key: VITE_FIREBASE_API_KEY
         sync: false
       - key: VITE_FIREBASE_AUTH_DOMAIN
-        sync: false
+        value: buildwitheli-media.firebaseapp.com
       - key: VITE_FIREBASE_PROJECT_ID
-        sync: false
+        value: buildwitheli-media
       - key: VITE_FIREBASE_APP_ID
         sync: false
+      - key: VITE_FIREBASE_MESSAGING_SENDER_ID
+        value: "973033606621"
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
