@@ -31,11 +31,11 @@ A creator-led publishing platform for approved blog articles and externally host
 
 A Render Node-service blueprint is provided in `render.yaml`; Firebase rules deployment configuration is provided in `firebase.json`. Follow [docs/PRODUCTION-DEPLOYMENT.md](docs/PRODUCTION-DEPLOYMENT.md) to configure Firebase, Render and Paystack test mode. Cloud credentials and owner UID must be supplied securely in the provider dashboards; they are not stored in GitHub. Production hosting and real Firebase/Paystack integration are not considered verified until the deployed checks in that guide pass.
 
-The application includes Firebase Storage cover uploads, public story/category/sitemap routes, production story metadata, a payment-return status page and unit/source tests. Remaining operational work includes expiry status reconciliation/automation, refunds and chargebacks, media cleanup, scalable admin pagination, and real cloud end-to-end verification.
+The application includes Supabase Storage cover uploads (server-side service-role access), public story/category/sitemap routes, production story metadata, a payment-return status page and unit/source tests. Remaining operational work includes expiry status reconciliation/automation, refunds and chargebacks, media cleanup, scalable admin pagination, and real cloud end-to-end verification.
 
 Never commit `.env`, Firebase service-account JSON, private keys, or Paystack secret keys. Never request or store a Mobile Money PIN.
 
 
 ### Creator cover images
 
-Creator cover-image uploads use Firebase Storage. Enable the Storage bucket, set `VITE_FIREBASE_STORAGE_BUCKET`, and deploy `storage.rules` as described in [docs/SETUP.md](docs/SETUP.md). Uploads are limited to JPG, PNG or WebP images up to 8 MB and are scoped to each authenticated creator UID.
+Creator cover-image uploads use a public Supabase Storage bucket named `creator-media`. Configure `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` on the server only. Uploads are authenticated through Firebase, scoped to the creator's UID folder, and limited to JPG, PNG or WebP up to 8 MB. The Supabase Free plan includes 1 GB file storage; free projects may pause after one week of inactivity.
