@@ -38,8 +38,6 @@ app.use('/api',rateLimit({windowMs:15*60*1000,limit:120,standardHeaders:true,leg
 const timestamp=v=>v?.toDate?.()?.toISOString?.()||v||null;
 const cleanDoc=d=>({id:d.id,...d.data(),createdAt:timestamp(d.data().createdAt),updatedAt:timestamp(d.data().updatedAt),publishedAt:timestamp(d.data().publishedAt),expiresAt:timestamp(d.data().expiresAt),verifiedAt:timestamp(d.data().verifiedAt)});
 const appSettings=()=>db().collection('settings').doc('app');
-async function getPrice(){try{const s=await appSettings().get();return Number(s.data()?.subscriptionPriceGHS??process.env.SUBSCRIPTION_PRICE_GHS??30);}catch{return Number(process.env.SUBSCRIPTION_PRICE_GHS||30);}}
-const activeSubscription=s=>Boolean(s&&s.status==='ACTIVE'&&s.expiresAt?.toDate?.()&&s.expiresAt.toDate()>new Date());
 const profileSchema=z.object({displayName:z.string().trim().min(2).max(60),bio:z.string().trim().max(500).optional().default(''),website:z.string().url().max(200).optional().or(z.literal('')),avatarUrl:z.string().url().max(500).optional().or(z.literal(''))});
 
 app.get('/api/health',(_req,res)=>res.json({ok:true,service:'buildwitheli-media-api'}));
@@ -76,7 +74,7 @@ app.get('/api/creator/dashboard',requireUser,async(req,res)=>{
     db().collection('transactions').where('uid','==',req.user.uid).limit(100).get()
   ]);
   const myPosts=posts.docs.map(cleanDoc).sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
-  res.json({profile:profile.exists?profile.data():null,subscription:sub.exists?cleanDoc(sub):null,posts:myPosts,transactions:txs.docs.map(cleanDoc).sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||''))),canPublish:activeSubscription(sub.data()),subscriptionPriceGHS:await getPrice(),emailVerified:req.user.email_verified});
+  res.json({profile:profile.exists?profile.data():null,posts:myPosts,canPublish:true,earlyAccess:true,emailVerified:req.user.email_verified});
   }catch(e){console.error(e);res.status(503).json({error:'Creator workspace is unavailable.'});}
 });
 app.get('/api/payments/history',requireUser,async(req,res)=>{
@@ -89,6 +87,8 @@ app.get('/api/payments/status/:reference',requireUser,async(req,res)=>{
   try{const snap=await db().collection('transactions').doc(reference).get();if(!snap.exists||snap.data().uid!==req.user.uid)return res.sendStatus(404);const data=snap.data();res.json({reference,status:data.status,verifiedAt:timestamp(data.verifiedAt)});}
   catch{res.status(503).json({error:'Payment status is unavailable.'});}
 });
+app.post('/api/payments/initialize',requireUser,(_req,res)=>res.status(410).json({error:'Payments are temporarily disabled during free early access.'}));
+/*
 app.post('/api/payments/initialize',requireUser,async(req,res)=>{
   if(!req.user.email_verified)return res.status(403).json({error:'Verify your email before subscribing.'});
   if(!process.env.PAYSTACK_SECRET_KEY)return res.status(503).json({error:'Paystack is not configured.'});
@@ -100,6 +100,8 @@ app.post('/api/payments/initialize',requireUser,async(req,res)=>{
     res.json({authorization_url:data.data.authorization_url,reference});
   }catch(e){console.error(e);res.status(502).json({error:'Unable to start checkout.'});}
 });
+app.post('/api/payments/webhook',async(_req,res)=>res.status(410).json({error:'Payments are temporarily disabled during free early access.'}));
+/*
 app.post('/api/payments/webhook',async(req,res)=>{
   const signature=req.headers['x-paystack-signature'];if(!process.env.PAYSTACK_SECRET_KEY||!signature)return res.sendStatus(401);
   const expected=crypto.createHmac('sha512',process.env.PAYSTACK_SECRET_KEY).update(req.body).digest('hex');
@@ -121,13 +123,13 @@ app.post('/api/payments/webhook',async(req,res)=>{
     });res.sendStatus(200);
   }catch(e){console.error(e);res.sendStatus(500);}
 });
+*/
 app.post('/api/creator/posts',requireUser,async(req,res)=>{
   if(!req.user.email_verified)return res.status(403).json({error:'Verify your email first.'});
   const schema=z.object({title:z.string().trim().min(5).max(120),excerpt:z.string().trim().max(280).optional(),body:z.string().trim().min(50).max(50000),category:z.string().trim().min(2).max(40),type:z.enum(['ARTICLE','VLOG']),videoUrl:z.string().url().optional(),coverImageUrl:z.string().url().max(1000).optional().refine(value=>!value||/^https:\/\/[^/]+\/storage\/v1\/object\/public\/creator-media\//.test(value),{message:'Cover images must use the configured public media bucket.'})});
   const parsed=schema.safeParse(req.body);if(!parsed.success)return res.status(400).json({error:'Please check your submission fields.'});
   if(parsed.data.type==='VLOG'&&!parsed.data.videoUrl)return res.status(400).json({error:'A vlog needs an external video URL.'});
   try{
-    const sub=await db().collection('subscriptions').doc(req.user.uid).get();if(!activeSubscription(sub.data()))return res.status(402).json({error:'An active membership is required to submit content.'});
     const profile=await db().collection('users').doc(req.user.uid).get();
     const slug=parsed.data.title.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,80)+'-'+crypto.randomBytes(3).toString('hex');const doc=await db().collection('posts').add({...parsed.data,slug,uid:req.user.uid,authorName:profile.data()?.displayName||req.user.name||req.user.email,status:'PENDING',featured:false,createdAt:new Date(),publishedAt:null});
     await db().collection('moderationHistory').add({postId:doc.id,action:'SUBMITTED',actorUid:req.user.uid,createdAt:new Date()});res.status(201).json({id:doc.id,status:'PENDING'});
