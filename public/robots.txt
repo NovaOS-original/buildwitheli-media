@@ -1,10 +1,8 @@
 User-agent: *
 Allow: /
-Disallow: /api/
-Disallow: /payment/
 Disallow: /creator/
 Disallow: /admin/
-Sitemap: https://YOUR_PUBLIC_DOMAIN/sitemap.xml
+Sitemap: https://novaos-original.github.io/buildwitheli-media/sitemap.xml
 
 User-agent: OAI-SearchBot
 Allow: /
