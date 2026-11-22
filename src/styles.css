@@ -44,3 +44,23 @@
 .btn.outline:hover{background:#fff;color:#111827;border-color:#fff}
 .small-action{background:#e9edf2;color:#111827;border-color:#cbd5e1}
 .small-action:hover{background:#c6f36b;color:#10150d;border-color:#c6f36b}
+
+/* High-specificity contrast fix for every light/outline button */
+button.btn.outline,
+a.btn.outline,
+.btn.outline,
+.workspace .btn.outline,
+.story-article .btn.outline {
+  background-color: #eef1f5 !important;
+  color: #111827 !important;
+  border-color: #cbd5e1 !important;
+  text-shadow: none !important;
+  opacity: 1;
+}
+button.btn.outline:hover,
+a.btn.outline:hover,
+.btn.outline:hover {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+  border-color: #94a3b8 !important;
+}
