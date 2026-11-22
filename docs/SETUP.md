@@ -53,3 +53,12 @@ The Node server serves the Vite build in production. Keep the API and web app on
 
 ## Secrets
 Never commit .env, Firebase service account files, private keys, or Paystack secret keys. Rotate any secret accidentally exposed.
+
+
+## Firebase Storage (creator cover images)
+
+1. In the Firebase console, open **Storage** and create/enable the default bucket for the same Firebase project used by Authentication and Firestore.
+2. Copy the exact bucket name shown in Firebase project settings into `VITE_FIREBASE_STORAGE_BUCKET` in your local `.env` file.
+3. Deploy the repository's `storage.rules` file using the Firebase CLI: `firebase deploy --only storage` after selecting the correct Firebase project.
+4. Creator submissions can upload JPG, PNG or WebP cover images up to 8 MB. Storage rules allow public reads and authenticated writes only inside the uploader's own UID folder. Do not weaken these rules to allow anonymous uploads.
+5. Test with a non-owner creator account before enabling production uploads. Deleting a post does not yet automatically delete its stored image; media cleanup remains a future task.
