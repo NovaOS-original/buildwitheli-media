@@ -32,3 +32,8 @@ A creator-led publishing platform for approved blog articles and externally host
 Media upload, public article detail routes/SSR, full SEO sitemap/schema, payment return UI, expiry automation, refunds/chargebacks, and comprehensive end-to-end tests remain to be completed. Configure a Node host for Express; GitHub Pages alone cannot run the backend. Do not switch Paystack to live mode until security and end-to-end tests have passed.
 
 Never commit `.env`, Firebase service-account JSON, private keys, or Paystack secret keys. Never request or store a Mobile Money PIN.
+
+
+### Creator cover images
+
+Creator cover-image uploads use Firebase Storage. Enable the Storage bucket, set `VITE_FIREBASE_STORAGE_BUCKET`, and deploy `storage.rules` as described in [docs/SETUP.md](docs/SETUP.md). Uploads are limited to JPG, PNG or WebP images up to 8 MB and are scoped to each authenticated creator UID.
