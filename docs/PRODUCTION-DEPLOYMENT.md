@@ -1,10 +1,10 @@
 # Production setup and verification
 
-This repository is prepared for a single-origin Render Node service (frontend + Express API) and Firebase services. The repository changes do not create cloud projects, accept account terms, or set private credentials. Complete the console steps below before public launch.
+This repository is prepared for a single-origin Render Node service (frontend + Express API) and Firebase Auth/Firestore plus Supabase Storage. The repository changes do not create cloud projects, accept account terms, or set private credentials. Complete the console steps below before public launch.
 
 ## 1. Firebase project
 
-1. Create or select the production Firebase project. Enable **Authentication → Email/Password**, create **Cloud Firestore**, and enable **Storage**.
+1. Create or select the Firebase project. Enable **Authentication → Email/Password** and create **Cloud Firestore**. Image files are stored separately in Supabase Storage.
 2. Register a Firebase Web App. Copy its config into the Render build environment variables listed below.
 3. Create a Firebase Admin service account for the API. Store its project ID, service-account email and private key only in Render's environment settings. Do not upload the JSON key to GitHub or this chat.
 4. Create your owner account in Firebase Authentication and verify its email. Copy its immutable UID. Set that same UID in both `OWNER_FIREBASE_UID` and `VITE_OWNER_FIREBASE_UID`. The server uses the former for authorization; the latter only controls the admin navigation display.
@@ -16,7 +16,15 @@ This repository is prepared for a single-origin Render Node service (frontend + 
    npx firebase-tools deploy --only firestore:rules,storage --project YOUR_FIREBASE_PROJECT_ID
    ```
    Review `firestore.rules` before deployment and replace `REPLACE_WITH_OWNER_FIREBASE_UID` with the owner UID. Do not loosen the deny-by-default rules.
-6. Add your production website domain to Firebase Authentication → Settings → Authorized domains. Verify email/password sign-in and creator-owned Storage uploads.
+6. Add your production website domain to Firebase Authentication → Settings → Authorized domains. Verify email/password sign-in.
+
+## 1A. Supabase Storage (free-tier media bucket)
+
+1. Create/use a Supabase project on the Free plan and create a **Public** bucket named `creator-media`.
+2. Copy the project URL and service-role secret from Supabase Project Settings → API.
+3. Add `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` to Render's server environment only. Never use a `VITE_` prefix for the service-role secret and never commit it.
+4. Redeploy after setting the variables. Test an authenticated creator image upload; verify the returned public URL loads and the object path starts with that creator's Firebase UID.
+5. The app limits cover uploads to 8 MB and JPG/PNG/WebP. Supabase Free currently includes 1 GB file storage and 5 GB cached plus 5 GB uncached egress; free projects may pause after one week of inactivity. Watch usage and keep backups of important media.
 
 ## 2. Render production hosting
 
@@ -24,7 +32,8 @@ This repository is prepared for a single-origin Render Node service (frontend + 
 2. Set every variable marked `sync: false` in the Render service's Environment page. Required variables:
    - `APP_ORIGIN`: the exact public HTTPS origin Render assigns (or your custom domain), e.g. `https://your-service.onrender.com`.
    - `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`: Firebase Admin service-account values. For the private key, paste the complete PEM private key; preserve newline characters or use escaped `\\n` if the provider requires a single line.
-   - `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_STORAGE_BUCKET`, `VITE_FIREBASE_APP_ID`: Firebase Web App values.
+   - `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_APP_ID`: Firebase Web App values.
+   - `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`: Supabase project URL and server-only service-role secret.
    - `OWNER_FIREBASE_UID` and `VITE_OWNER_FIREBASE_UID`: the same verified owner UID.
    - `PAYSTACK_SECRET_KEY` and `PAYSTACK_PUBLIC_KEY`: use Paystack TEST keys first.
    - `SUBSCRIPTION_PRICE_GHS`: defaults to `30`.
