@@ -25,7 +25,7 @@ app.post('/api/media/cover',requireUser,express.raw({type:['image/jpeg','image/p
   if(!process.env.SUPABASE_URL||!process.env.SUPABASE_SERVICE_ROLE_KEY)return res.status(503).json({error:'Supabase Storage is not configured on the server.'});
   const ext=mime==='image/jpeg'?'jpg':mime==='image/png'?'png':'webp';
   const objectPath=req.user.uid+'/'+crypto.randomUUID()+'.'+ext;
-  const base=process.env.SUPABASE_URL.replace(/\\/$/,'');
+  const base=process.env.SUPABASE_URL.endsWith('/')?process.env.SUPABASE_URL.slice(0,-1):process.env.SUPABASE_URL;
   try{
     const response=await fetch(base+'/storage/v1/object/creator-media/'+objectPath.split('/').map(encodeURIComponent).join('/'),{method:'POST',headers:{Authorization:'Bearer '+process.env.SUPABASE_SERVICE_ROLE_KEY,apikey:process.env.SUPABASE_SERVICE_ROLE_KEY,'Content-Type':mime,'x-upsert':'false'},body:req.body});
     if(!response.ok){const detail=await response.text();console.error('Supabase Storage upload failed',response.status,detail.slice(0,300));return res.status(502).json({error:'Image storage upload failed. Check the Supabase bucket configuration.'});}
