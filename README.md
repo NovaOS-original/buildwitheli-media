@@ -8,7 +8,7 @@ A creator-led publishing platform for approved blog articles and externally host
 
 - Firebase email/password registration, login, verification and password reset.
 - Creator workspace for profile editing, subscription status, article/vlog submission, submission tracking and payment history.
-- GH₵ subscription checkout initialized server-side through Paystack; only a signed webhook followed by a server-side transaction verification can activate membership.
+- Free early access: no checkout, payment collection or paid subscription requirement. Creator publishing access is enabled after email verification.
 - New content is private and pending editorial review until an owner approves it.
 - Super Admin dashboard for moderation, user suspension/restoration, transaction review, revenue analytics, featured content, subscription price settings, announcements and CSV transaction export.
 - Express API serves the production Vite build when deployed as a Node service.
@@ -23,19 +23,19 @@ A creator-led publishing platform for approved blog articles and externally host
 
 ## Required configuration
 
-- Firebase Authentication (Email/Password), Firestore and a Firebase Admin service account.
+- Firebase Authentication (Email/Password), Firestore and a Firebase Admin service account (temporary until the documented Supabase Auth/Postgres cutover).
 - Set `OWNER_FIREBASE_UID` and `VITE_OWNER_FIREBASE_UID` to the owner's verified Firebase UID. The server enforces owner access; the Vite value only displays the admin navigation.
 - Replace the owner UID placeholder in `firestore.rules` and deploy the rules.
-- Paystack test secret key and webhook URL for payment testing.
+- Payments are disabled for the initial hosted launch. Paystack configuration is intentionally omitted.
 - Configure `APP_ORIGIN` and `VITE_API_ORIGIN` for the chosen deployment.
 
 ## Production setup
 
-A Render Node-service blueprint is provided in `render.yaml`; Firebase rules deployment configuration is provided in `firebase.json`. Follow [docs/PRODUCTION-DEPLOYMENT.md](docs/PRODUCTION-DEPLOYMENT.md) to configure Firebase, Render and Paystack test mode. Cloud credentials and owner UID must be supplied securely in the provider dashboards; they are not stored in GitHub. Production hosting and real Firebase/Paystack integration are not considered verified until the deployed checks in that guide pass.
+A Render Node-service blueprint is provided in `render.yaml`; Firebase rules deployment configuration is provided in `firebase.json`. Follow [docs/PRODUCTION-DEPLOYMENT.md](docs/PRODUCTION-DEPLOYMENT.md) to configure the current Firebase-backed API and Render hosting. Payment integration is disabled. Cloud credentials and owner UID must be supplied securely in the provider dashboards; they are not stored in GitHub. Production hosting and real Firebase/Paystack integration are not considered verified until the deployed checks in that guide pass.
 
-The application includes Supabase Storage cover uploads (server-side service-role access), public story/category/sitemap routes, production story metadata, a payment-return status page and unit/source tests. Remaining operational work includes expiry status reconciliation/automation, refunds and chargebacks, media cleanup, scalable admin pagination, and real cloud end-to-end verification.
+The application includes Supabase Storage cover uploads (server-side service-role access), public story/category/sitemap routes, production story metadata, a free early-access publishing mode and unit/source tests. Remaining operational work includes expiry status reconciliation/automation, refunds and chargebacks, media cleanup, scalable admin pagination, and real cloud end-to-end verification.
 
-Never commit `.env`, Firebase service-account JSON, private keys, or Paystack secret keys. Never request or store a Mobile Money PIN.
+Never commit `.env`, Firebase service-account JSON, private keys or Supabase service-role keys.
 
 
 ### Creator cover images
