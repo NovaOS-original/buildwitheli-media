@@ -43,7 +43,7 @@ The Node server serves the Vite build in production. Keep the API and web app on
 - Configure Firebase Authentication, Firestore and a real owner UID.
 - Creator workspace now includes profile editing, membership status, submission form, submission status and payment history.
 - Super Admin API/UI now includes moderation, user suspension/restoration, transactions, revenue analytics, featured content, subscription pricing, announcements and transaction CSV export.
-- Media upload using Firebase Storage with file type/size validation and private pending assets is still outstanding.
+- Creator cover-image uploads use Supabase Storage through an authenticated server endpoint. The service-role key remains server-side; only JPG/PNG/WebP up to 8 MB are accepted.
 - Payment status is verified by the signed server webhook; a dedicated payment-return status page and automated expiry/refund/chargeback workflows are still outstanding.
 - Add idempotency, webhook replay protection, subscription expiry jobs, refund/chargeback handling and operational alerts.
 - Implement dynamic sitemap, canonical URLs, per-article metadata and Article/VideoObject JSON-LD for approved content. The current Vite SPA metadata is only a starter and does not yet provide full SSR.
@@ -55,13 +55,13 @@ The Node server serves the Vite build in production. Keep the API and web app on
 Never commit .env, Firebase service account files, private keys, or Paystack secret keys. Rotate any secret accidentally exposed.
 
 
-## Firebase Storage (creator cover images)
+## Supabase Storage (creator cover images)
 
-1. In the Firebase console, open **Storage** and create/enable the default bucket for the same Firebase project used by Authentication and Firestore.
-2. Copy the exact bucket name shown in Firebase project settings into `VITE_FIREBASE_STORAGE_BUCKET` in your local `.env` file.
-3. Deploy the repository's `storage.rules` file using the Firebase CLI: `firebase deploy --only storage` after selecting the correct Firebase project.
-4. Creator submissions can upload JPG, PNG or WebP cover images up to 8 MB. Storage rules allow public reads and authenticated writes only inside the uploader's own UID folder. Do not weaken these rules to allow anonymous uploads.
-5. Test with a non-owner creator account before enabling production uploads. Deleting a post does not yet automatically delete its stored image; media cleanup remains a future task.
+1. Create or use a Supabase project on the Free plan. Open **Storage → New bucket** and create a bucket named `creator-media`.
+2. Set the bucket to **Public** so approved story cover images can be displayed to readers. Do not expose the service-role key in browser code.
+3. In Project Settings → API, copy the project URL and the service-role secret into server environment variables `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. The service-role secret must be stored only in Render/local server environment, never in Vite variables or GitHub.
+4. The API authenticates each upload with the existing Firebase ID token, assigns the object path under that creator's Firebase UID, restricts MIME types to JPG/PNG/WebP, and limits uploads to 8 MB. The backend uses the Supabase service role for the upload; browser clients never receive it.
+5. Free-plan allowance currently includes 1 GB storage and 5 GB cached plus 5 GB uncached egress; max upload size is 50 MB, while this app intentionally caps cover images at 8 MB. Free projects may pause after a week of inactivity. Monitor usage and remove unused images manually until automated media cleanup is implemented.
 
 
 ## Public stories, categories and sitemap
