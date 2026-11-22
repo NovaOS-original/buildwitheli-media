@@ -2,15 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 
-test('subscription duration is 30 days',()=>{assert.equal(30*24*60*60*1000,2592000000);});
-test('Paystack GHS amount uses pesewas',()=>{assert.equal(Math.round(30*100),3000);});
 test('creator submissions are always created as pending',async()=>{const source=await readFile(new URL('./index.js',import.meta.url),'utf8');assert.match(source,/status:'PENDING'/);});
 test('admin routes require verified user and owner middleware',async()=>{const source=await readFile(new URL('./index.js',import.meta.url),'utf8');assert.match(source,/app\.get\('\/api\/admin\/dashboard',requireUser,requireOwner/);assert.match(source,/app\.post\('\/api\/admin\/users\/:uid\/suspend',requireUser,requireOwner/);});
-test('creator workspace and payment history routes exist',async()=>{const source=await readFile(new URL('./index.js',import.meta.url),'utf8');assert.match(source,/\/api\/creator\/dashboard/);assert.match(source,/\/api\/payments\/history/);});
+test('creator workspace is free during early access',async()=>{const source=await readFile(new URL('./index.js',import.meta.url),'utf8');assert.match(source,/\/api\/creator\/dashboard/);assert.match(source,/canPublish:true,earlyAccess:true/);assert.doesNotMatch(source,/An active membership is required/);});
 test('suspension is enforced during authentication',async()=>{const source=await readFile(new URL('./auth.js',import.meta.url),'utf8');assert.match(source,/status==='SUSPENDED'/);});
 
-test('payment status lookup is authenticated and scoped to the signed-in creator',async()=>{const source=await readFile(new URL('./index.js',import.meta.url),'utf8');assert.match(source,/app\.get\('\/api\/payments\/status\/:reference',requireUser/);assert.match(source,/snap\.data\(\)\.uid!==req\.user\.uid/);});
-test('payment return page does not treat a redirect as payment confirmation',async()=>{const source=await readFile(new URL('../src/App.jsx',import.meta.url),'utf8');assert.match(source,/signed Paystack webhook is the source of confirmation/);assert.match(source,/api\/payments\/status/);});
+test('payment routes are disabled for free early access',async()=>{const source=await readFile(new URL('./index.js',import.meta.url),'utf8');assert.match(source,/app\.all\('\/api\/payments\/\*'/);assert.match(source,/status\(410\)/);assert.match(source,/Payments are disabled during free early access/);});
+test('creator interface contains no checkout or payment tabs',async()=>{const source=await readFile(new URL('../src/App.jsx',import.meta.url),'utf8');assert.doesNotMatch(source,/Paystack|creatorTab==='payments'|view==='payment'/);assert.match(source,/Free <small>during early access/);});
 
 test('creator submissions accept a validated optional cover image URL',async()=>{const source=await readFile(new URL('./index.js',import.meta.url),'utf8');assert.ok(source.includes('coverImageUrl:z.string().url().max(1000).optional()'));});
 test('Supabase media uploads are authenticated, server-side and limited to safe image types and size',async()=>{const source=await readFile(new URL('./index.js',import.meta.url),'utf8');assert.match(source,/app\.post\('\/api\/media\/cover',requireUser/);assert.match(source,/SUPABASE_SERVICE_ROLE_KEY/);assert.match(source,/image\/jpeg/);assert.match(source,/limit:'8mb'/);assert.match(source,/creator-media/);});
