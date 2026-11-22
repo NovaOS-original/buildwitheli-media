@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /creator/
+Disallow: /admin/
+Sitemap: https://YOUR_PUBLIC_DOMAIN/sitemap.xml
+
+User-agent: OAI-SearchBot
+Allow: /
