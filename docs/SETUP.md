@@ -4,7 +4,6 @@
 - Node.js 20+
 - npm
 - A Firebase project with Authentication (Email/Password) and Cloud Firestore enabled
-- A Paystack account with TEST keys for development
 
 ## 2. Install
 ```bash
@@ -23,14 +22,11 @@ The Vite app runs at http://localhost:5173 and the API at http://localhost:4000.
 6. Create the owner user through Firebase Authentication, verify the email, then set both OWNER_FIREBASE_UID and VITE_OWNER_FIREBASE_UID to that account's immutable Firebase UID. The VITE value only controls whether the admin navigation is displayed; every admin API independently checks OWNER_FIREBASE_UID on the server. Do not use an email address as the authorization key.
 7. Replace REPLACE_WITH_OWNER_FIREBASE_UID in firestore.rules with the same UID and deploy the rules.
 
-## 4. Paystack test mode
-1. Use only the Paystack TEST secret/public keys in development.
-2. Set PAYSTACK_SECRET_KEY and PAYSTACK_PUBLIC_KEY in the server environment.
-3. Configure the webhook URL as https://YOUR_API_DOMAIN/api/payments/webhook.
-4. Set the webhook signing secret to the Paystack secret key in the API environment. The server validates the x-paystack-signature HMAC and then independently verifies each successful charge with Paystack.
-5. Set APP_ORIGIN to the correct web origin and VITE_API_ORIGIN to the API origin (use http://localhost:4000 locally).
-6. Test with Paystack's published test payment methods. Never ask for or store a Mobile Money PIN.
-7. A subscription is written only after the server-side transaction verification succeeds and matches the stored user, amount and currency.
+## 4. Free early access
+
+- No payment provider, checkout credentials or subscription setup is required for the initial hosted launch.
+- Creators can submit content after verifying their email. All submissions remain pending until owner moderation.
+- Paystack routes return HTTP 410 while free early access is active. Historical payment records are retained but not displayed in the creator or admin dashboards.
 
 ## 5. Build and run
 ```bash
@@ -44,12 +40,12 @@ The Node server serves the Vite build in production. Keep the API and web app on
 - Creator workspace now includes profile editing, membership status, submission form, submission status and payment history.
 - Super Admin API/UI now includes moderation, user suspension/restoration, transactions, revenue analytics, featured content, subscription pricing, announcements and transaction CSV export.
 - Creator cover-image uploads use Supabase Storage through an authenticated server endpoint. The service-role key remains server-side; only JPG/PNG/WebP up to 8 MB are accepted.
-- Payment status is verified by the signed server webhook; a dedicated payment-return status page and automated expiry/refund/chargeback workflows are still outstanding.
+- Payments are disabled for the initial hosted launch. Paystack can be reintroduced later with signed webhook verification and subscription lifecycle tests.
 - Add idempotency, webhook replay protection, subscription expiry jobs, refund/chargeback handling and operational alerts.
 - Implement dynamic sitemap, canonical URLs, per-article metadata and Article/VideoObject JSON-LD for approved content. The current Vite SPA metadata is only a starter and does not yet provide full SSR.
 - Add privacy, terms, contact and editorial policy pages.
-- Configure production hosting for the Node API and Firebase. GitHub stores the source; GitHub Pages alone cannot run this Express backend.
-- Run security review, integration tests and real end-to-end Paystack test-mode checks before public launch.
+- Configure production hosting for the Node API and the current Firebase authentication/database integration. Supabase Auth/Postgres runtime migration remains a separate cutover task. GitHub stores the source; GitHub Pages alone cannot run this Express backend.
+- Run security review, integration tests and registration/moderation end-to-end checks before public launch. Payment testing is deferred.
 
 ## Secrets
 Never commit .env, Firebase service account files, private keys, or Paystack secret keys. Rotate any secret accidentally exposed.
