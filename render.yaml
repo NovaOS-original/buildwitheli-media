@@ -1,0 +1,43 @@
+services:
+  - type: web
+    name: buildwitheli-media
+    runtime: node
+    region: frankfurt
+    plan: starter
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: APP_ORIGIN
+        sync: false
+      - key: VITE_API_ORIGIN
+        value: ""
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: FIREBASE_CLIENT_EMAIL
+        sync: false
+      - key: FIREBASE_PRIVATE_KEY
+        sync: false
+      - key: VITE_FIREBASE_API_KEY
+        sync: false
+      - key: VITE_FIREBASE_AUTH_DOMAIN
+        sync: false
+      - key: VITE_FIREBASE_PROJECT_ID
+        sync: false
+      - key: VITE_FIREBASE_STORAGE_BUCKET
+        sync: false
+      - key: VITE_FIREBASE_APP_ID
+        sync: false
+      - key: OWNER_FIREBASE_UID
+        sync: false
+      - key: VITE_OWNER_FIREBASE_UID
+        sync: false
+      - key: PAYSTACK_SECRET_KEY
+        sync: false
+      - key: PAYSTACK_PUBLIC_KEY
+        sync: false
+      - key: SUBSCRIPTION_PRICE_GHS
+        value: "30"
