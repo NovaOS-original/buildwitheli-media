@@ -7,72 +7,85 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
-import { db } from './firebase.js';
+import { db, firebaseAdmin, admin } from './firebase.js';
 import { requireUser, requireOwner } from './auth.js';
 
 const app=express();
 const here=path.dirname(fileURLToPath(import.meta.url));
 const dist=path.resolve(here,'../dist');
 const port=Number(process.env.PORT||4000);
+const DAY=24*60*60*1000;
 app.use(helmet());
-app.use(cors({origin:(process.env.APP_ORIGIN||'http://localhost:5173').split(','),credentials:false}));
+app.use(cors({origin:(process.env.APP_ORIGIN||'http://localhost:5173').split(',').map(x=>x.trim()),credentials:false}));
 app.use('/api/payments/webhook',express.raw({type:'application/json'}));
 app.use(express.json({limit:'1mb'}));
 app.use('/api',rateLimit({windowMs:15*60*1000,limit:120,standardHeaders:true,legacyHeaders:false}));
-const price=()=>Number(process.env.SUBSCRIPTION_PRICE_GHS||30);
+
+const timestamp=v=>v?.toDate?.()?.toISOString?.()||v||null;
+const cleanDoc=d=>({id:d.id,...d.data(),createdAt:timestamp(d.data().createdAt),updatedAt:timestamp(d.data().updatedAt),publishedAt:timestamp(d.data().publishedAt),expiresAt:timestamp(d.data().expiresAt),verifiedAt:timestamp(d.data().verifiedAt)});
+const appSettings=()=>db().collection('settings').doc('app');
+async function getPrice(){try{const s=await appSettings().get();return Number(s.data()?.subscriptionPriceGHS??process.env.SUBSCRIPTION_PRICE_GHS??30);}catch{return Number(process.env.SUBSCRIPTION_PRICE_GHS||30);}}
+const activeSubscription=s=>Boolean(s&&s.status==='ACTIVE'&&s.expiresAt?.toDate?.()&&s.expiresAt.toDate()>new Date());
+const profileSchema=z.object({displayName:z.string().trim().min(2).max(60),bio:z.string().trim().max(500).optional().default(''),website:z.string().url().max(200).optional().or(z.literal('')),avatarUrl:z.string().url().max(500).optional().or(z.literal(''))});
 
 app.get('/api/health',(_req,res)=>res.json({ok:true,service:'buildwitheli-media-api'}));
 app.get('/api/public/posts',async(_req,res)=>{
-  try{const snap=await db().collection('posts').where('status','==','PUBLISHED').orderBy('publishedAt','desc').limit(30).get();
-    res.json({posts:snap.docs.map(d=>({id:d.id,...d.data(),publishedAt:d.data().publishedAt?.toDate?.()?.toISOString()||null}))});
-  }catch(e){console.error(e);res.status(503).json({error:'Content feed is not configured.'});}
+  try{const snap=await db().collection('posts').where('status','==','PUBLISHED').orderBy('publishedAt','desc').limit(30).get();res.json({posts:snap.docs.map(cleanDoc)});}
+  catch(e){console.error(e);res.status(503).json({error:'Content feed is not configured.'});}
 });
 app.get('/api/me',requireUser,async(req,res)=>{
-  try{const snap=await db().collection('users').doc(req.user.uid).get();res.json({profile:snap.exists?snap.data():null,emailVerified:req.user.email_verified});}
+  try{const snap=await db().collection('users').doc(req.user.uid).get();const sub=await db().collection('subscriptions').doc(req.user.uid).get();res.json({profile:snap.exists?snap.data():null,subscription:sub.exists?cleanDoc(sub):null,emailVerified:req.user.email_verified});}
   catch{res.status(503).json({error:'Profile service unavailable.'});}
+});
+app.put('/api/creator/profile',requireUser,async(req,res)=>{
+  const parsed=profileSchema.safeParse(req.body);if(!parsed.success)return res.status(400).json({error:'Please check your profile fields.'});
+  try{const ref=db().collection('users').doc(req.user.uid);const old=await ref.get();const now=new Date();await ref.set({...parsed.data,email:req.user.email||'',status:old.data()?.status||'ACTIVE',createdAt:old.data()?.createdAt||now,updatedAt:now},{merge:true});res.json({ok:true,profile:parsed.data});}
+  catch{res.status(503).json({error:'Could not save your profile.'});}
+});
+app.get('/api/creator/dashboard',requireUser,async(req,res)=>{
+  try{const [profile,sub,posts,txs]=await Promise.all([
+    db().collection('users').doc(req.user.uid).get(),db().collection('subscriptions').doc(req.user.uid).get(),
+    db().collection('posts').where('uid','==',req.user.uid).limit(100).get(),
+    db().collection('transactions').where('uid','==',req.user.uid).limit(100).get()
+  ]);
+  const myPosts=posts.docs.map(cleanDoc).sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
+  res.json({profile:profile.exists?profile.data():null,subscription:sub.exists?cleanDoc(sub):null,posts:myPosts,transactions:txs.docs.map(cleanDoc).sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||''))),canPublish:activeSubscription(sub.data()),emailVerified:req.user.email_verified});
+  }catch(e){console.error(e);res.status(503).json({error:'Creator workspace is unavailable.'});}
+});
+app.get('/api/payments/history',requireUser,async(req,res)=>{
+  try{const snap=await db().collection('transactions').where('uid','==',req.user.uid).limit(100).get();res.json({transactions:snap.docs.map(cleanDoc).sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')))});}
+  catch{res.status(503).json({error:'Payment history is unavailable.'});}
 });
 app.post('/api/payments/initialize',requireUser,async(req,res)=>{
   if(!req.user.email_verified)return res.status(403).json({error:'Verify your email before subscribing.'});
   if(!process.env.PAYSTACK_SECRET_KEY)return res.status(503).json({error:'Paystack is not configured.'});
-  const reference='bwm_'+crypto.randomUUID().replaceAll('-','');
+  const amount=Math.round((await getPrice())*100),reference='bwm_'+crypto.randomUUID().replaceAll('-','');
   try{
-    const response=await fetch('https://api.paystack.co/transaction/initialize',{method:'POST',headers:{Authorization:'Bearer '+process.env.PAYSTACK_SECRET_KEY,'Content-Type':'application/json'},body:JSON.stringify({email:req.user.email,amount:Math.round(price()*100),currency:'GHS',reference,callback_url:(process.env.APP_ORIGIN||'http://localhost:5173')+'/payment/return',metadata:{uid:req.user.uid,product:'BUILDWITHELI MEDIA monthly membership'}})});
-    const data=await response.json();
-    if(!response.ok||!data.status) return res.status(502).json({error:'Payment provider could not initialize checkout.'});
-    await db().collection('transactions').doc(reference).create({uid:req.user.uid,reference,amountPesewas:Math.round(price()*100),currency:'GHS',status:'INITIALIZED',createdAt:new Date(),provider:'paystack'});
+    const response=await fetch('https://api.paystack.co/transaction/initialize',{method:'POST',headers:{Authorization:'Bearer '+process.env.PAYSTACK_SECRET_KEY,'Content-Type':'application/json'},body:JSON.stringify({email:req.user.email,amount,currency:'GHS',reference,callback_url:(process.env.APP_ORIGIN||'http://localhost:5173')+'/payment/return',metadata:{uid:req.user.uid,product:'BUILDWITHELI MEDIA monthly membership'}})});
+    const data=await response.json();if(!response.ok||!data.status)return res.status(502).json({error:'Payment provider could not initialize checkout.'});
+    await db().collection('transactions').doc(reference).create({uid:req.user.uid,reference,amountPesewas:amount,currency:'GHS',status:'INITIALIZED',createdAt:new Date(),provider:'paystack'});
     res.json({authorization_url:data.data.authorization_url,reference});
   }catch(e){console.error(e);res.status(502).json({error:'Unable to start checkout.'});}
 });
 app.post('/api/payments/webhook',async(req,res)=>{
-  const signature=req.headers['x-paystack-signature'];
-  if(!process.env.PAYSTACK_SECRET_KEY||!signature)return res.sendStatus(401);
+  const signature=req.headers['x-paystack-signature'];if(!process.env.PAYSTACK_SECRET_KEY||!signature)return res.sendStatus(401);
   const expected=crypto.createHmac('sha512',process.env.PAYSTACK_SECRET_KEY).update(req.body).digest('hex');
-  const a=Buffer.from(String(signature)),b=Buffer.from(expected);
-  if(a.length!==b.length||!crypto.timingSafeEqual(a,b))return res.sendStatus(401);
-  const event=JSON.parse(req.body.toString('utf8'));
+  const a=Buffer.from(String(signature)),b=Buffer.from(expected);if(a.length!==b.length||!crypto.timingSafeEqual(a,b))return res.sendStatus(401);
+  let event;try{event=JSON.parse(req.body.toString('utf8'));}catch{return res.sendStatus(400);}
   if(event.event!=='charge.success')return res.sendStatus(200);
-  const tx=event.data,reference=String(tx.reference||'');
+  const reference=String(event.data?.reference||'');
   try{
     const verify=await fetch('https://api.paystack.co/transaction/verify/'+encodeURIComponent(reference),{headers:{Authorization:'Bearer '+process.env.PAYSTACK_SECRET_KEY}});
-    const result=await verify.json();
-    if(!verify.ok||!result.status||result.data.status!=='success')return res.sendStatus(200);
-    const verified=result.data;
-    const ref=db().collection('transactions').doc(reference);
+    const result=await verify.json();if(!verify.ok||!result.status||result.data.status!=='success')return res.sendStatus(200);
+    const verified=result.data,ref=db().collection('transactions').doc(reference);
     await db().runTransaction(async t=>{
-      const snap=await t.get(ref);if(!snap.exists)return;
-      const saved=snap.data();
-      if(saved.status==='SUCCESS')return;
+      const snap=await t.get(ref);if(!snap.exists)return;const saved=snap.data();if(saved.status==='SUCCESS')return;
       if(saved.uid!==String(verified.metadata?.uid||'')||saved.amountPesewas!==verified.amount||saved.currency!==verified.currency)return;
-      const userRef=db().collection('subscriptions').doc(saved.uid);
-      const userSnap=await t.get(userRef);
-      const now=new Date();
-      const currentEnd=userSnap.exists?userSnap.data().expiresAt?.toDate?.():null;
-      const start=currentEnd&&currentEnd>now?currentEnd:now;
-      const expiresAt=new Date(start.getTime()+30*24*60*60*1000);
-      t.set(userRef,{uid:saved.uid,status:'ACTIVE',startedAt:now,expiresAt,updatedAt:now},{merge:true});
+      const subRef=db().collection('subscriptions').doc(saved.uid),subSnap=await t.get(subRef),now=new Date();
+      const currentEnd=subSnap.exists?subSnap.data().expiresAt?.toDate?.():null,start=currentEnd&&currentEnd>now?currentEnd:now;
+      t.set(subRef,{uid:saved.uid,status:'ACTIVE',startedAt:now,expiresAt:new Date(start.getTime()+30*DAY),updatedAt:now},{merge:true});
       t.update(ref,{status:'SUCCESS',verifiedAt:now,providerTransactionId:String(verified.id)});
-    });
-    res.sendStatus(200);
+    });res.sendStatus(200);
   }catch(e){console.error(e);res.sendStatus(500);}
 });
 app.post('/api/creator/posts',requireUser,async(req,res)=>{
@@ -81,32 +94,47 @@ app.post('/api/creator/posts',requireUser,async(req,res)=>{
   const parsed=schema.safeParse(req.body);if(!parsed.success)return res.status(400).json({error:'Please check your submission fields.'});
   if(parsed.data.type==='VLOG'&&!parsed.data.videoUrl)return res.status(400).json({error:'A vlog needs an external video URL.'});
   try{
-    const sub=await db().collection('subscriptions').doc(req.user.uid).get();
-    if(!sub.exists||sub.data().status!=='ACTIVE'||!sub.data().expiresAt?.toDate?.()||sub.data().expiresAt.toDate()<=new Date())return res.status(402).json({error:'An active membership is required to submit content.'});
-    const doc=await db().collection('posts').add({...parsed.data,uid:req.user.uid,status:'PENDING',createdAt:new Date(),publishedAt:null});
-    await db().collection('moderationHistory').add({postId:doc.id,action:'SUBMITTED',actorUid:req.user.uid,createdAt:new Date()});
-    res.status(201).json({id:doc.id,status:'PENDING'});
+    const sub=await db().collection('subscriptions').doc(req.user.uid).get();if(!activeSubscription(sub.data()))return res.status(402).json({error:'An active membership is required to submit content.'});
+    const profile=await db().collection('users').doc(req.user.uid).get();
+    const doc=await db().collection('posts').add({...parsed.data,uid:req.user.uid,authorName:profile.data()?.displayName||req.user.name||req.user.email,status:'PENDING',featured:false,createdAt:new Date(),publishedAt:null});
+    await db().collection('moderationHistory').add({postId:doc.id,action:'SUBMITTED',actorUid:req.user.uid,createdAt:new Date()});res.status(201).json({id:doc.id,status:'PENDING'});
   }catch(e){console.error(e);res.status(503).json({error:'Could not save submission.'});}
 });
-app.get('/api/admin/overview',requireUser,requireOwner,async(_req,res)=>{
-  try{const [users,posts,txs]=await Promise.all([db().collection('users').count().get(),db().collection('posts').count().get(),db().collection('transactions').get()]);
-    const revenue=txs.docs.filter(d=>d.data().status==='SUCCESS').reduce((s,d)=>s+(d.data().amountPesewas||0),0);
-    res.json({users:users.data().count,posts:posts.data().count,transactions:txs.size,revenueGHS:revenue/100});
-  }catch{res.status(503).json({error:'Admin reporting unavailable.'});}
+
+// Super Admin dashboard: every route below is protected by verified Firebase UID.
+app.get('/api/admin/dashboard',requireUser,requireOwner,async(_req,res)=>{
+  try{
+    const [usersSnap,postsSnap,txSnap,subsSnap,authUsers]=await Promise.all([
+      db().collection('users').limit(1000).get(),db().collection('posts').limit(500).get(),
+      db().collection('transactions').limit(500).get(),db().collection('subscriptions').limit(1000).get(),
+      admin.auth(firebaseAdmin()).listUsers(1000)
+    ]);
+    const userDocs=new Map(usersSnap.docs.map(d=>[d.id,d.data()]));
+    const users=authUsers.users.map(u=>({uid:u.uid,email:u.email||'',displayName:userDocs.get(u.uid)?.displayName||u.displayName||'',status:u.disabled?'SUSPENDED':(userDocs.get(u.uid)?.status||'ACTIVE'),createdAt:u.metadata.creationTime||null,lastSignInAt:u.metadata.lastSignInTime||null}));
+    const posts=postsSnap.docs.map(cleanDoc),transactions=txSnap.docs.map(cleanDoc),subscriptions=subsSnap.docs.map(cleanDoc);
+    const revenue=transactions.filter(t=>t.status==='SUCCESS').reduce((s,t)=>s+(Number(t.amountPesewas)||0),0);
+    const monthMap=new Map();for(const t of transactions.filter(x=>x.status==='SUCCESS')){const m=String(t.createdAt||'').slice(0,7);if(m)monthMap.set(m,(monthMap.get(m)||0)+(Number(t.amountPesewas)||0));}
+    const analytics=[...monthMap.entries()].sort((a,b)=>a[0].localeCompare(b[0])).slice(-6).map(([month,pesewas])=>({month,revenueGHS:pesewas/100}));
+    const now=new Date(),active=subscriptions.filter(s=>activeSubscription(s)).length;
+    res.json({metrics:{users:users.length,creators:users.filter(u=>u.displayName).length,posts:posts.length,pendingPosts:posts.filter(p=>p.status==='PENDING').length,activeSubscriptions:active,transactions:transactions.length,revenueGHS:revenue/100},users,posts:posts.sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||''))),transactions:transactions.sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||''))),subscriptions,analytics,settings:{subscriptionPriceGHS:await getPrice()},generatedAt:now.toISOString()});
+  }catch(e){console.error(e);res.status(503).json({error:'Admin dashboard data could not be loaded.'});}
 });
+app.get('/api/admin/overview',requireUser,requireOwner,async(req,res)=>{try{const [u,p,t]=await Promise.all([db().collection('users').count().get(),db().collection('posts').count().get(),db().collection('transactions').get()]);res.json({users:u.data().count,posts:p.data().count,transactions:t.size,revenueGHS:t.docs.filter(d=>d.data().status==='SUCCESS').reduce((s,d)=>s+(d.data().amountPesewas||0),0)/100});}catch{res.status(503).json({error:'Admin reporting unavailable.'});}});
 app.post('/api/admin/posts/:id/moderate',requireUser,requireOwner,async(req,res)=>{
   const action=req.body?.action;if(!['APPROVE','REJECT'].includes(action))return res.status(400).json({error:'Invalid moderation action.'});
-  try{const ref=db().collection('posts').doc(req.params.id);const snap=await ref.get();if(!snap.exists)return res.sendStatus(404);
-    await ref.update({status:action==='APPROVE'?'PUBLISHED':'REJECTED',publishedAt:action==='APPROVE'?new Date():null,moderatedAt:new Date(),moderatedBy:req.user.uid});
-    await db().collection('moderationHistory').add({postId:req.params.id,action,actorUid:req.user.uid,createdAt:new Date()});res.json({ok:true});
+  try{const ref=db().collection('posts').doc(req.params.id),snap=await ref.get();if(!snap.exists)return res.sendStatus(404);const now=new Date();
+    await ref.update({status:action==='APPROVE'?'PUBLISHED':'REJECTED',publishedAt:action==='APPROVE'?now:null,moderatedAt:now,moderatedBy:req.user.uid});
+    await db().collection('moderationHistory').add({postId:req.params.id,action,actorUid:req.user.uid,createdAt:now});res.json({ok:true});
   }catch{res.status(503).json({error:'Moderation failed.'});}
 });
+app.delete('/api/admin/posts/:id',requireUser,requireOwner,async(req,res)=>{try{const ref=db().collection('posts').doc(req.params.id);if(!(await ref.get()).exists)return res.sendStatus(404);await ref.delete();await db().collection('moderationHistory').add({postId:req.params.id,action:'DELETED',actorUid:req.user.uid,createdAt:new Date()});res.json({ok:true});}catch{res.status(503).json({error:'Content deletion failed.'});}});
+app.post('/api/admin/users/:uid/suspend',requireUser,requireOwner,async(req,res)=>{if(req.params.uid===req.user.uid)return res.status(400).json({error:'You cannot suspend the owner account.'});try{await admin.auth(firebaseAdmin()).updateUser(req.params.uid,{disabled:true});await db().collection('users').doc(req.params.uid).set({status:'SUSPENDED',updatedAt:new Date()},{merge:true});await db().collection('adminAudit').add({action:'USER_SUSPENDED',targetUid:req.params.uid,actorUid:req.user.uid,createdAt:new Date()});res.json({ok:true});}catch{res.status(503).json({error:'Could not suspend this user.'});}});
+app.post('/api/admin/users/:uid/restore',requireUser,requireOwner,async(req,res)=>{try{await admin.auth(firebaseAdmin()).updateUser(req.params.uid,{disabled:false});await db().collection('users').doc(req.params.uid).set({status:'ACTIVE',updatedAt:new Date()},{merge:true});await db().collection('adminAudit').add({action:'USER_RESTORED',targetUid:req.params.uid,actorUid:req.user.uid,createdAt:new Date()});res.json({ok:true});}catch{res.status(503).json({error:'Could not restore this user.'});}});
+app.put('/api/admin/settings',requireUser,requireOwner,async(req,res)=>{const parsed=z.object({subscriptionPriceGHS:z.number().min(1).max(10000)}).safeParse(req.body);if(!parsed.success)return res.status(400).json({error:'Invalid subscription price.'});try{await appSettings().set({...parsed.data,updatedAt:new Date(),updatedBy:req.user.uid},{merge:true});res.json({ok:true,settings:parsed.data});}catch{res.status(503).json({error:'Could not update settings.'});}});
+app.post('/api/admin/posts/:id/feature',requireUser,requireOwner,async(req,res)=>{try{const featured=Boolean(req.body?.featured);await db().collection('posts').doc(req.params.id).update({featured,featuredAt:featured?new Date():null});res.json({ok:true,featured});}catch{res.status(503).json({error:'Could not update featured status.'});}});
+app.post('/api/admin/announcements',requireUser,requireOwner,async(req,res)=>{const parsed=z.object({title:z.string().trim().min(3).max(100),body:z.string().trim().min(5).max(1000)}).safeParse(req.body);if(!parsed.success)return res.status(400).json({error:'Check announcement fields.'});try{const doc=await db().collection('announcements').add({...parsed.data,active:true,createdAt:new Date(),createdBy:req.user.uid});res.status(201).json({id:doc.id});}catch{res.status(503).json({error:'Could not publish announcement.'});}});
+app.get('/api/admin/export/transactions.csv',requireUser,requireOwner,async(_req,res)=>{try{const snap=await db().collection('transactions').limit(2000).get();const rows=[['reference','uid','amountGHS','currency','status','createdAt'],...snap.docs.map(d=>{const x=d.data();return[d.id,x.uid,(Number(x.amountPesewas)||0)/100,x.currency,x.status,timestamp(x.createdAt)];})];const csv=rows.map(row=>row.map(v=>'"'+String(v??'').replaceAll('"','""')+'"').join(',')).join('\n');res.setHeader('Content-Type','text/csv');res.setHeader('Content-Disposition','attachment; filename="buildwitheli-transactions.csv"');res.send(csv);}catch{res.status(503).json({error:'Export failed.'});}});
+
 // In production the same Node service can serve the built Vite frontend.
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(dist, { index: false, maxAge: '1h' }));
-  app.get('*', (req,res,next) => {
-    if (req.path.startsWith('/api/')) return next();
-    res.sendFile(path.join(dist,'index.html'));
-  });
-}
+if(process.env.NODE_ENV==='production'){app.use(express.static(dist,{index:false,maxAge:'1h'}));app.get('*',(req,res,next)=>{if(req.path.startsWith('/api/'))return next();res.sendFile(path.join(dist,'index.html'));});}
 app.listen(port,()=>console.log('BUILDWITHELI MEDIA API listening on '+port));
