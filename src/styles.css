@@ -64,3 +64,22 @@ a.btn.outline:hover,
   color: #000000 !important;
   border-color: #94a3b8 !important;
 }
+
+
+/* Legal pages and creator sign-up consent */
+.legal-page{max-width:900px;margin:0 auto;padding-top:38px;padding-bottom:70px}
+.legal-copy{max-width:780px;margin:38px auto 0;color:#d8dee5}
+.legal-copy h1{font-size:clamp(34px,6vw,58px);line-height:1.08;letter-spacing:-.045em;margin:12px 0}
+.legal-copy h2{font-size:19px;color:#f1f4f7;margin:30px 0 9px}
+.legal-copy p,.legal-copy li{font-size:14px;line-height:1.85;color:#bfc8d1}
+.legal-copy ul{padding-left:22px}
+.legal-copy a{color:#c6f36b;text-decoration:underline}
+.legal-updated,.legal-note{font-size:12px;color:#8f9ba7}
+.legal-note{max-width:780px;margin:30px auto 0;padding-top:18px;border-top:1px solid #ffffff20;line-height:1.7}
+.footer-legal{display:flex;gap:16px;flex-wrap:wrap}
+.footer-legal button,.text-link{border:0;background:none;padding:0;color:#c6f36b;text-decoration:underline;font:inherit;cursor:pointer}
+.footer-legal button{font-size:11px}
+.auth .legal-consent{display:flex;align-items:flex-start;gap:9px;margin:16px 0;color:#bfc8d1;font-size:11px;line-height:1.6}
+.auth .legal-consent input{display:inline-block;flex:0 0 18px;width:18px;height:18px;margin:1px 0 0;padding:0;accent-color:#c6f36b}
+.auth .legal-consent .text-link{display:inline;color:#c6f36b;font-size:inherit}
+@media(max-width:600px){.legal-page{padding:28px 18px 55px}.legal-copy{margin-top:26px}.footer-legal{width:100%}}
