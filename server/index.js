@@ -29,9 +29,22 @@ const activeSubscription=s=>Boolean(s&&s.status==='ACTIVE'&&s.expiresAt?.toDate?
 const profileSchema=z.object({displayName:z.string().trim().min(2).max(60),bio:z.string().trim().max(500).optional().default(''),website:z.string().url().max(200).optional().or(z.literal('')),avatarUrl:z.string().url().max(500).optional().or(z.literal(''))});
 
 app.get('/api/health',(_req,res)=>res.json({ok:true,service:'buildwitheli-media-api'}));
-app.get('/api/public/posts',async(_req,res)=>{
-  try{const snap=await db().collection('posts').where('status','==','PUBLISHED').orderBy('publishedAt','desc').limit(30).get();res.json({posts:snap.docs.map(cleanDoc)});}
+app.get('/api/public/posts',async(req,res)=>{
+  try{const category=String(req.query.category||'').trim().slice(0,40);let query=db().collection('posts').where('status','==','PUBLISHED').orderBy('publishedAt','desc');if(category)query=query.where('category','==',category);const snap=await query.limit(60).get();res.json({posts:snap.docs.map(cleanDoc)});}
   catch(e){console.error(e);res.status(503).json({error:'Content feed is not configured.'});}
+});
+app.get('/api/public/posts/:id',async(req,res)=>{
+  try{let snap=await db().collection('posts').doc(req.params.id).get();if(!snap.exists){const found=await db().collection('posts').where('slug','==',req.params.id).where('status','==','PUBLISHED').limit(1).get();if(found.empty)return res.sendStatus(404);snap=found.docs[0];}if(snap.data().status!=='PUBLISHED')return res.sendStatus(404);res.json({post:cleanDoc(snap)});}
+  catch(e){console.error(e);res.status(503).json({error:'Story is unavailable.'});}
+});
+app.get('/api/public/categories',async(_req,res)=>{
+  try{const snap=await db().collection('posts').where('status','==','PUBLISHED').limit(500).get();const categories=[...new Set(snap.docs.map(d=>String(d.data().category||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));res.json({categories});}
+  catch(e){console.error(e);res.status(503).json({error:'Categories are unavailable.'});}
+});
+app.get('/sitemap.xml',async(_req,res)=>{
+  const base=(process.env.APP_ORIGIN||'https://YOUR_PUBLIC_DOMAIN').split(',')[0].replace(/\/$/,'');
+  try{const snap=await db().collection('posts').where('status','==','PUBLISHED').orderBy('publishedAt','desc').limit(1000).get();const urls=[base+'/',...snap.docs.map(d=>base+'/story/'+encodeURIComponent(d.data().slug||d.id))];const xml='<?xml version="1.0" encoding="UTF-8"?>'+'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+urls.map(url=>'<url><loc>'+url.replaceAll('&','&amp;').replaceAll('<','&lt;')+'</loc></url>').join('')+'</urlset>';res.type('application/xml').send(xml);}
+  catch(e){console.error(e);res.status(503).type('text/plain').send('Sitemap temporarily unavailable');}
 });
 app.get('/api/me',requireUser,async(req,res)=>{
   try{const snap=await db().collection('users').doc(req.user.uid).get();const sub=await db().collection('subscriptions').doc(req.user.uid).get();res.json({profile:snap.exists?snap.data():null,subscription:sub.exists?cleanDoc(sub):null,emailVerified:req.user.email_verified});}
@@ -102,7 +115,7 @@ app.post('/api/creator/posts',requireUser,async(req,res)=>{
   try{
     const sub=await db().collection('subscriptions').doc(req.user.uid).get();if(!activeSubscription(sub.data()))return res.status(402).json({error:'An active membership is required to submit content.'});
     const profile=await db().collection('users').doc(req.user.uid).get();
-    const doc=await db().collection('posts').add({...parsed.data,uid:req.user.uid,authorName:profile.data()?.displayName||req.user.name||req.user.email,status:'PENDING',featured:false,createdAt:new Date(),publishedAt:null});
+    const slug=parsed.data.title.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,80)+'-'+crypto.randomBytes(3).toString('hex');const doc=await db().collection('posts').add({...parsed.data,slug,uid:req.user.uid,authorName:profile.data()?.displayName||req.user.name||req.user.email,status:'PENDING',featured:false,createdAt:new Date(),publishedAt:null});
     await db().collection('moderationHistory').add({postId:doc.id,action:'SUBMITTED',actorUid:req.user.uid,createdAt:new Date()});res.status(201).json({id:doc.id,status:'PENDING'});
   }catch(e){console.error(e);res.status(503).json({error:'Could not save submission.'});}
 });
