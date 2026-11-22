@@ -1,6 +1,6 @@
 # Production setup and verification
 
-This repository is prepared for a single-origin Render Node service (frontend + Express API) and Firebase Auth/Firestore plus Supabase Storage. The repository changes do not create cloud projects, accept account terms, or set private credentials. Complete the console steps below before public launch.
+This repository is prepared for a single-origin Render Node service (frontend + Express API) and Firebase Auth/Firestore plus Supabase Storage. The repository changes do not create cloud projects, accept account terms, or set private credentials. Complete the console steps below before public launch. **Important:** the current runtime still requires Firebase Auth/Firestore; the planned Supabase Auth/Postgres migration is not yet complete, so this is not yet a Firebase-free deployment.
 
 ## 1. Firebase project
 
@@ -39,16 +39,13 @@ This repository is prepared for a single-origin Render Node service (frontend + 
    - `SUBSCRIPTION_PRICE_GHS`: defaults to `30`.
 3. Keep `VITE_API_ORIGIN` empty: the production frontend and API are served from the same origin. The frontend is built during Render's build command, so Firebase `VITE_*` values must be present before the build starts. If you change them later, trigger a fresh deploy.
 4. Set `APP_ORIGIN` to the actual public origin after Render creates the service, then redeploy. Add your custom domain in Render if desired and configure its DNS using Render's displayed records. Enable HTTPS.
-5. Confirm `https://YOUR_DOMAIN/api/health` returns JSON with `ok: true`. This is a process health check, not proof that Firebase or Paystack credentials work.
+5. Confirm `https://YOUR_DOMAIN/api/health` returns JSON with `ok: true`. This is a process health check, not proof that Firebase credentials work.
 
-## 3. Paystack test mode
+## 3. Free early-access launch
 
-1. In the Paystack dashboard, use TEST mode and copy the test public and secret keys into Render. Do not use live keys yet.
-2. Add the webhook URL `https://YOUR_DOMAIN/api/payments/webhook` in Paystack. Paystack signs webhook requests with the secret key; the API validates that signature and independently verifies successful transactions before membership activation.
-3. Confirm the API's `APP_ORIGIN` matches the public site URL so checkout returns to `/payment/return`.
-4. Complete a test checkout using Paystack's official test payment methods. Verify the transaction appears in the creator's payment history and the 30-day membership becomes active only after the signed webhook and server-side verification.
-5. Test a declined/cancelled payment, a repeated webhook, a mismatched amount/currency and an expired membership. A browser redirect alone must never activate a membership.
-6. Never ask a creator for, or store, their Mobile Money PIN. Do not switch to live mode until test-mode end-to-end checks, access-control review and a small controlled live verification are approved.
+- Paystack is not configured or required for the initial launch. The frontend contains no checkout or subscription screens, and all `/api/payments/*` routes return HTTP 410.
+- Creators can submit content after verifying their email. Owner moderation remains mandatory before publication.
+- Historical payment and subscription records, if any, are retained but are not part of the launch workflow.
 
 ## 4. Verification checklist
 
@@ -64,11 +61,11 @@ Then verify in the deployed service:
 - `GET /api/health` responds successfully.
 - Firebase registration, email verification, login and password reset work.
 - An authenticated creator can save a profile and upload an image only to their own Storage folder.
-- A creator without an active subscription cannot submit content.
+- A verified creator can submit content without a subscription or payment.
 - A paid creator's new story remains PENDING until the owner approves it.
 - Pending/rejected stories are not visible through public story endpoints or sitemap.
 - The owner can access Super Admin; a normal creator receives 403 from admin APIs.
-- Paystack test checkout, signed webhook, server verification, payment history and 30-day renewal work.
+- Payment routes return HTTP 410 and no Paystack credentials are required.
 - Sitemap and canonical URLs use the production HTTPS domain.
 
 GitHub Actions runs unit/source tests and the Vite production build on each push to `main`. It does not test real Firebase or Paystack accounts. Production is not considered fully verified until the live service checks above have been completed.
@@ -78,5 +75,5 @@ GitHub Actions runs unit/source tests and the Vite production build on each push
 - Keep all secrets in Render environment settings or a secure local secret manager. Never commit `.env`, service-account JSON or secret keys.
 - The Firebase Web API key is a client configuration value, not an Admin credential; protect data with Firebase Security Rules and server-side authorization.
 - Back up Firestore before launch and set billing alerts/quotas in Google Cloud and Paystack.
-- Add monitoring for failed webhooks, payment reconciliation, Firestore errors and service restarts.
+- Add monitoring for failed requests, Firestore errors and service restarts.
 - GitHub Pages cannot host this Express backend. Use the Render Node service defined in `render.yaml`.
