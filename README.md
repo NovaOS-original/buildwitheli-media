@@ -27,9 +27,11 @@ A creator-led publishing platform for approved blog articles and externally host
 - Paystack test secret key and webhook URL for payment testing.
 - Configure `APP_ORIGIN` and `VITE_API_ORIGIN` for the chosen deployment.
 
-## Not yet production complete
+## Production setup
 
-Media upload, public article detail routes/SSR, full SEO sitemap/schema, payment return UI, expiry automation, refunds/chargebacks, and comprehensive end-to-end tests remain to be completed. Configure a Node host for Express; GitHub Pages alone cannot run the backend. Do not switch Paystack to live mode until security and end-to-end tests have passed.
+A Render Node-service blueprint is provided in `render.yaml`; Firebase rules deployment configuration is provided in `firebase.json`. Follow [docs/PRODUCTION-DEPLOYMENT.md](docs/PRODUCTION-DEPLOYMENT.md) to configure Firebase, Render and Paystack test mode. Cloud credentials and owner UID must be supplied securely in the provider dashboards; they are not stored in GitHub. Production hosting and real Firebase/Paystack integration are not considered verified until the deployed checks in that guide pass.
+
+The application includes Firebase Storage cover uploads, public story/category/sitemap routes, production story metadata, a payment-return status page and unit/source tests. Remaining operational work includes expiry status reconciliation/automation, refunds and chargebacks, media cleanup, scalable admin pagination, and real cloud end-to-end verification.
 
 Never commit `.env`, Firebase service-account JSON, private keys, or Paystack secret keys. Never request or store a Mobile Money PIN.
 
