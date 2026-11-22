@@ -13,7 +13,7 @@ This repository is prepared for a single-origin Render Node service (frontend + 
    npm install
    npx firebase-tools login
    npx firebase-tools use YOUR_FIREBASE_PROJECT_ID
-   npx firebase-tools deploy --only firestore:rules,storage --project YOUR_FIREBASE_PROJECT_ID
+   npx firebase-tools deploy --only firestore:rules --project YOUR_FIREBASE_PROJECT_ID
    ```
    Review `firestore.rules` before deployment and replace `REPLACE_WITH_OWNER_FIREBASE_UID` with the owner UID. Do not loosen the deny-by-default rules.
 6. Add your production website domain to Firebase Authentication → Settings → Authorized domains. Verify email/password sign-in.
