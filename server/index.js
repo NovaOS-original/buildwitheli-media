@@ -19,6 +19,19 @@ const DAY=24*60*60*1000;
 app.use(helmet());
 app.use(cors({origin:(process.env.APP_ORIGIN||'http://localhost:5173').split(',').map(x=>x.trim()),credentials:false}));
 app.use('/api/payments/webhook',express.raw({type:'application/json'}));
+app.post('/api/media/cover',requireUser,express.raw({type:['image/jpeg','image/png','image/webp'],limit:'8mb'}),async(req,res)=>{
+  const mime=req.headers['content-type'];
+  if(!['image/jpeg','image/png','image/webp'].includes(mime)||!Buffer.isBuffer(req.body)||!req.body.length)return res.status(400).json({error:'Upload a JPG, PNG or WebP image.'});
+  if(!process.env.SUPABASE_URL||!process.env.SUPABASE_SERVICE_ROLE_KEY)return res.status(503).json({error:'Supabase Storage is not configured on the server.'});
+  const ext=mime==='image/jpeg'?'jpg':mime==='image/png'?'png':'webp';
+  const objectPath=req.user.uid+'/'+crypto.randomUUID()+'.'+ext;
+  const base=process.env.SUPABASE_URL.replace(/\\/$/,'');
+  try{
+    const response=await fetch(base+'/storage/v1/object/creator-media/'+objectPath.split('/').map(encodeURIComponent).join('/'),{method:'POST',headers:{Authorization:'Bearer '+process.env.SUPABASE_SERVICE_ROLE_KEY,apikey:process.env.SUPABASE_SERVICE_ROLE_KEY,'Content-Type':mime,'x-upsert':'false'},body:req.body});
+    if(!response.ok){const detail=await response.text();console.error('Supabase Storage upload failed',response.status,detail.slice(0,300));return res.status(502).json({error:'Image storage upload failed. Check the Supabase bucket configuration.'});}
+    res.status(201).json({url:base+'/storage/v1/object/public/creator-media/'+objectPath.split('/').map(encodeURIComponent).join('/')});
+  }catch(e){console.error('Supabase Storage unavailable',e);res.status(502).json({error:'Image storage is temporarily unavailable.'});}
+});
 app.use(express.json({limit:'1mb'}));
 app.use('/api',rateLimit({windowMs:15*60*1000,limit:120,standardHeaders:true,legacyHeaders:false}));
 
@@ -110,7 +123,7 @@ app.post('/api/payments/webhook',async(req,res)=>{
 });
 app.post('/api/creator/posts',requireUser,async(req,res)=>{
   if(!req.user.email_verified)return res.status(403).json({error:'Verify your email first.'});
-  const schema=z.object({title:z.string().trim().min(5).max(120),excerpt:z.string().trim().max(280).optional(),body:z.string().trim().min(50).max(50000),category:z.string().trim().min(2).max(40),type:z.enum(['ARTICLE','VLOG']),videoUrl:z.string().url().optional(),coverImageUrl:z.string().url().max(1000).optional().refine(value=>!value||['firebasestorage.googleapis.com','storage.googleapis.com'].includes(new URL(value).hostname),{message:'Cover images must use Firebase Storage.'})});
+  const schema=z.object({title:z.string().trim().min(5).max(120),excerpt:z.string().trim().max(280).optional(),body:z.string().trim().min(50).max(50000),category:z.string().trim().min(2).max(40),type:z.enum(['ARTICLE','VLOG']),videoUrl:z.string().url().optional(),coverImageUrl:z.string().url().max(1000).optional().refine(value=>!value||/^https:\/\/[^/]+\/storage\/v1\/object\/public\/creator-media\//.test(value),{message:'Cover images must use the configured public media bucket.'})});
   const parsed=schema.safeParse(req.body);if(!parsed.success)return res.status(400).json({error:'Please check your submission fields.'});
   if(parsed.data.type==='VLOG'&&!parsed.data.videoUrl)return res.status(400).json({error:'A vlog needs an external video URL.'});
   try{
