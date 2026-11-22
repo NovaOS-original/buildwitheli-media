@@ -20,3 +20,6 @@ test('published submissions receive stable readable slugs',async()=>{const sourc
 
 test('admin category management is owner protected and persists category settings',async()=>{const source=await readFile(new URL('./index.js',import.meta.url),'utf8');assert.match(source,/app\.put\('\/api\/admin\/categories',requireUser,requireOwner/);assert.match(source,/CATEGORIES_UPDATED/);});
 test('admin dashboard exposes bounded audit and moderation history',async()=>{const source=await readFile(new URL('./index.js',import.meta.url),'utf8');assert.match(source,/collection\('adminAudit'\)\.orderBy\('createdAt','desc'\)\.limit\(100\)/);assert.match(source,/kind:'MODERATION'/);});
+
+test('production story responses inject canonical metadata and structured data',async()=>{const source=await readFile(new URL('./index.js',import.meta.url),'utf8');assert.match(source,/app\.get\('\/story\/:slug'/);assert.match(source,/application\/ld\+json/);assert.match(source,/og:image/);assert.match(source,/twitter:card/);});
+test('vlog pages embed only supported YouTube and Vimeo hosts',async()=>{const source=await readFile(new URL('../src/App.jsx',import.meta.url),'utf8');assert.match(source,/youtube-nocookie\.com\/embed/);assert.match(source,/player\.vimeo\.com\/video/);assert.match(source,/host==='youtu\.be'/);});
