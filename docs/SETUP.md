@@ -70,3 +70,10 @@ Never commit .env, Firebase service account files, private keys, or Paystack sec
 - Category filters are generated from published content. The public API exposes `/api/public/categories` and supports category filtering on `/api/public/posts`.
 - The Node API generates `/sitemap.xml` from the homepage and up to 1,000 currently published stories. Set `APP_ORIGIN` to the canonical public website origin (not the API host if they differ) so sitemap URLs are correct.
 - Before launch, replace `YOUR_PUBLIC_DOMAIN` in `public/robots.txt` with the canonical HTTPS domain and submit `/sitemap.xml` in Google Search Console. The story view currently updates title and description client-side; this is not server-side rendering, so rich crawler previews are not guaranteed. SSR or prerendering and per-story Open Graph/Article JSON-LD remain follow-up SEO work.
+
+## Article metadata and vlog playback
+
+- Production story routes resolve only published slugs and return a 404 for missing or unpublished stories.
+- Story HTML includes per-article canonical, description, Open Graph, Twitter summary-card metadata and schema.org Article/VideoObject structured data.
+- Vlog pages embed YouTube and Vimeo links using privacy-enhanced YouTube embeds where supported. Other video hosts remain ordinary external links.
+- Keep APP_ORIGIN set to the canonical public website origin. Replace the placeholder domain in public/robots.txt before launch and ensure the canonical origin matches sitemap output.
