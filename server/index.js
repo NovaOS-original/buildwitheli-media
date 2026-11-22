@@ -4,11 +4,15 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import crypto from 'node:crypto';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import { db } from './firebase.js';
 import { requireUser, requireOwner } from './auth.js';
 
 const app=express();
+const here=path.dirname(fileURLToPath(import.meta.url));
+const dist=path.resolve(here,'../dist');
 const port=Number(process.env.PORT||4000);
 app.use(helmet());
 app.use(cors({origin:(process.env.APP_ORIGIN||'http://localhost:5173').split(','),credentials:false}));
@@ -97,4 +101,12 @@ app.post('/api/admin/posts/:id/moderate',requireUser,requireOwner,async(req,res)
     await db().collection('moderationHistory').add({postId:req.params.id,action,actorUid:req.user.uid,createdAt:new Date()});res.json({ok:true});
   }catch{res.status(503).json({error:'Moderation failed.'});}
 });
+// In production the same Node service can serve the built Vite frontend.
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(dist, { index: false, maxAge: '1h' }));
+  app.get('*', (req,res,next) => {
+    if (req.path.startsWith('/api/')) return next();
+    res.sendFile(path.join(dist,'index.html'));
+  });
+}
 app.listen(port,()=>console.log('BUILDWITHELI MEDIA API listening on '+port));
