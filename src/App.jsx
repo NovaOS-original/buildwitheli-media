@@ -60,14 +60,14 @@ function App(){
 
 function videoEmbedUrl(raw){
  try{
-  const u=new URL(raw),host=u.hostname.toLowerCase().replace(/^www\\./,'');
+  const u=new URL(raw),host=u.hostname.toLowerCase().replace(/^www\./,'');
   if(host==='youtu.be'){const id=u.pathname.split('/').filter(Boolean)[0];return id?'https://www.youtube-nocookie.com/embed/'+encodeURIComponent(id):'';}
   if(host==='youtube.com'||host==='m.youtube.com'||host==='youtube-nocookie.com'){
-   const id=u.searchParams.get('v')||u.pathname.match(/\\/(?:embed|shorts)\\/([^/?]+)/)?.[1];
+   const id=u.searchParams.get('v')||u.pathname.match(/\/(?:embed|shorts)\/([^/?]+)/)?.[1];
    return id?'https://www.youtube-nocookie.com/embed/'+encodeURIComponent(id):'';
   }
   if(host==='vimeo.com'||host==='player.vimeo.com'){
-   const id=u.pathname.split('/').filter(Boolean).pop();return /^\\d+$/.test(id||'')?'https://player.vimeo.com/video/'+id:'';
+   const id=u.pathname.split('/').filter(Boolean).pop();return /^\d+$/.test(id||'')?'https://player.vimeo.com/video/'+id:'';
   }
   return '';
  }catch{return '';}
