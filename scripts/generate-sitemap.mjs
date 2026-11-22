@@ -27,7 +27,7 @@ for (const post of posts) {
   const date = post.published_at ? new Date(post.published_at).toISOString() : new Date().toISOString();
   const article = {
     '@context': 'https://schema.org',
-    '@type': post.type === 'VLOG' ? 'VideoObject' : 'Article',
+    '@type': 'Article',
     headline: post.title || 'BUILDWITHELI MEDIA story',
     description: stripMarkup(post.excerpt || post.body).slice(0, 300),
     datePublished: date,
