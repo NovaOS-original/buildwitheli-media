@@ -26,3 +26,11 @@
 .auth input{display:block;width:100%;height:45px;margin-top:8px;padding:0 12px;border:1px solid #ffffff25;border-radius:6px;background:#080d15;color:#fff;font:inherit}
 .top nav button.quiet{background:none;border:0;color:inherit;font:inherit;font-size:12px;cursor:pointer;padding:5px 0}
 .top nav button.quiet:hover{color:#c6f36b}
+
+/* Media loading and accessibility improvements */
+.post-link{display:block;height:100%;color:inherit;text-decoration:none}
+.post-link:focus-visible{outline:2px solid #c6f36b;outline-offset:5px;border-radius:8px}
+.post-cover{aspect-ratio:16/9;object-fit:cover}
+.story-hero-image{display:block;aspect-ratio:16/9;background:#111722}
+.auth-resend{display:block;margin:14px auto 0;padding:5px 0;border:0;background:transparent;color:#aebd9a;font:inherit;font-size:11px;text-decoration:underline;cursor:pointer}
+.auth-resend:disabled{opacity:.55;cursor:wait}
