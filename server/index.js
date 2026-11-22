@@ -49,7 +49,7 @@ app.get('/api/creator/dashboard',requireUser,async(req,res)=>{
     db().collection('transactions').where('uid','==',req.user.uid).limit(100).get()
   ]);
   const myPosts=posts.docs.map(cleanDoc).sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
-  res.json({profile:profile.exists?profile.data():null,subscription:sub.exists?cleanDoc(sub):null,posts:myPosts,transactions:txs.docs.map(cleanDoc).sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||''))),canPublish:activeSubscription(sub.data()),emailVerified:req.user.email_verified});
+  res.json({profile:profile.exists?profile.data():null,subscription:sub.exists?cleanDoc(sub):null,posts:myPosts,transactions:txs.docs.map(cleanDoc).sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||''))),canPublish:activeSubscription(sub.data()),subscriptionPriceGHS:await getPrice(),emailVerified:req.user.email_verified});
   }catch(e){console.error(e);res.status(503).json({error:'Creator workspace is unavailable.'});}
 });
 app.get('/api/payments/history',requireUser,async(req,res)=>{
