@@ -83,3 +83,6 @@ a.btn.outline:hover,
 .auth .legal-consent input{display:inline-block;flex:0 0 18px;width:18px;height:18px;margin:1px 0 0;padding:0;accent-color:#c6f36b}
 .auth .legal-consent .text-link{display:inline;color:#c6f36b;font-size:inherit}
 @media(max-width:600px){.legal-page{padding:28px 18px 55px}.legal-copy{margin-top:26px}.footer-legal{width:100%}}
+
+/* Help and support */
+.support-form{max-width:680px;margin:26px 0}.support-form select{width:100%;border:1px solid #ffffff2b;background:#080d15;color:#f4f5f2;border-radius:7px;padding:12px;font:inherit;font-size:13px;min-height:45px}.support-form select:focus{outline:1px solid #c6f36b;border-color:#c6f36b}.support-form textarea{min-height:150px}.admin-workspace .queue-item a{color:#c6f36b}
