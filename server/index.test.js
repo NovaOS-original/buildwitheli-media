@@ -14,3 +14,6 @@ test('payment return page does not treat a redirect as payment confirmation',asy
 
 test('creator submissions accept a validated optional cover image URL',async()=>{const source=await readFile(new URL('./index.js',import.meta.url),'utf8');assert.ok(source.includes('coverImageUrl:z.string().url().max(1000).optional()'));});
 test('Firebase Storage rules scope uploads to the authenticated creator UID and limit image size',async()=>{const rules=await readFile(new URL('../storage.rules',import.meta.url),'utf8');assert.ok(rules.includes('request.auth.uid == uid'));assert.ok(rules.includes('request.resource.size <= 8 * 1024 * 1024'));assert.ok(rules.includes("image/(jpeg|png|webp)"));});
+
+test('public story, categories and sitemap endpoints are defined',async()=>{const source=await readFile(new URL('./index.js',import.meta.url),'utf8');assert.match(source,/\/api\/public\/posts\/:id/);assert.match(source,/\/api\/public\/categories/);assert.match(source,/\/sitemap\.xml/);});
+test('published submissions receive stable readable slugs',async()=>{const source=await readFile(new URL('./index.js',import.meta.url),'utf8');assert.match(source,/const slug=parsed\.data\.title\.toLowerCase\(\)/);});
