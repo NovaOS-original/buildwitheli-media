@@ -38,7 +38,7 @@ app.get('/api/public/posts/:id',async(req,res)=>{
   catch(e){console.error(e);res.status(503).json({error:'Story is unavailable.'});}
 });
 app.get('/api/public/categories',async(_req,res)=>{
-  try{const snap=await db().collection('posts').where('status','==','PUBLISHED').limit(500).get();const categories=[...new Set(snap.docs.map(d=>String(d.data().category||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));res.json({categories});}
+  try{const [snap,settings]=await Promise.all([db().collection('posts').where('status','==','PUBLISHED').limit(500).get(),appSettings().get()]);const categories=[...new Set([...(settings.data()?.categories||[]),...snap.docs.map(d=>String(d.data().category||'').trim())].filter(Boolean))].sort((a,b)=>a.localeCompare(b));res.json({categories});}
   catch(e){console.error(e);res.status(503).json({error:'Categories are unavailable.'});}
 });
 app.get('/sitemap.xml',async(_req,res)=>{
@@ -123,10 +123,10 @@ app.post('/api/creator/posts',requireUser,async(req,res)=>{
 // Super Admin dashboard: every route below is protected by verified Firebase UID.
 app.get('/api/admin/dashboard',requireUser,requireOwner,async(_req,res)=>{
   try{
-    const [usersSnap,postsSnap,txSnap,subsSnap,authUsers]=await Promise.all([
+    const [usersSnap,postsSnap,txSnap,subsSnap,authUsers,settingsSnap,auditSnap,moderationSnap]=await Promise.all([
       db().collection('users').limit(1000).get(),db().collection('posts').limit(500).get(),
       db().collection('transactions').limit(500).get(),db().collection('subscriptions').limit(1000).get(),
-      admin.auth(firebaseAdmin()).listUsers(1000)
+      admin.auth(firebaseAdmin()).listUsers(1000),appSettings().get(),db().collection('adminAudit').orderBy('createdAt','desc').limit(100).get(),db().collection('moderationHistory').orderBy('createdAt','desc').limit(100).get()
     ]);
     const userDocs=new Map(usersSnap.docs.map(d=>[d.id,d.data()]));
     const users=authUsers.users.map(u=>({uid:u.uid,email:u.email||'',displayName:userDocs.get(u.uid)?.displayName||u.displayName||'',status:u.disabled?'SUSPENDED':(userDocs.get(u.uid)?.status||'ACTIVE'),createdAt:u.metadata.creationTime||null,lastSignInAt:u.metadata.lastSignInTime||null}));
@@ -135,7 +135,7 @@ app.get('/api/admin/dashboard',requireUser,requireOwner,async(_req,res)=>{
     const monthMap=new Map();for(const t of transactions.filter(x=>x.status==='SUCCESS')){const m=String(t.createdAt||'').slice(0,7);if(m)monthMap.set(m,(monthMap.get(m)||0)+(Number(t.amountPesewas)||0));}
     const analytics=[...monthMap.entries()].sort((a,b)=>a[0].localeCompare(b[0])).slice(-6).map(([month,pesewas])=>({month,revenueGHS:pesewas/100}));
     const now=new Date(),active=subscriptions.filter(s=>activeSubscription(s)).length;
-    res.json({metrics:{users:users.length,creators:users.filter(u=>u.displayName).length,posts:posts.length,pendingPosts:posts.filter(p=>p.status==='PENDING').length,activeSubscriptions:active,transactions:transactions.length,revenueGHS:revenue/100},users,posts:posts.sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||''))),transactions:transactions.sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||''))),subscriptions,analytics,settings:{subscriptionPriceGHS:await getPrice()},generatedAt:now.toISOString()});
+    res.json({metrics:{users:users.length,creators:users.filter(u=>u.displayName).length,posts:posts.length,pendingPosts:posts.filter(p=>p.status==='PENDING').length,activeSubscriptions:active,transactions:transactions.length,revenueGHS:revenue/100},users,posts:posts.sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||''))),transactions:transactions.sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||''))),subscriptions,analytics,categories:settingsSnap.data()?.categories||[],audit:[...auditSnap.docs.map(d=>({id:d.id,...d.data(),createdAt:timestamp(d.data().createdAt),kind:'ADMIN'})),...moderationSnap.docs.map(d=>({id:d.id,...d.data(),createdAt:timestamp(d.data().createdAt),kind:'MODERATION'}))].sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||''))).slice(0,100),settings:{subscriptionPriceGHS:await getPrice()},generatedAt:now.toISOString()});
   }catch(e){console.error(e);res.status(503).json({error:'Admin dashboard data could not be loaded.'});}
 });
 app.get('/api/admin/overview',requireUser,requireOwner,async(req,res)=>{try{const [u,p,t]=await Promise.all([db().collection('users').count().get(),db().collection('posts').count().get(),db().collection('transactions').get()]);res.json({users:u.data().count,posts:p.data().count,transactions:t.size,revenueGHS:t.docs.filter(d=>d.data().status==='SUCCESS').reduce((s,d)=>s+(d.data().amountPesewas||0),0)/100});}catch{res.status(503).json({error:'Admin reporting unavailable.'});}});
@@ -151,6 +151,13 @@ app.post('/api/admin/users/:uid/suspend',requireUser,requireOwner,async(req,res)
 app.post('/api/admin/users/:uid/restore',requireUser,requireOwner,async(req,res)=>{try{await admin.auth(firebaseAdmin()).updateUser(req.params.uid,{disabled:false});await db().collection('users').doc(req.params.uid).set({status:'ACTIVE',updatedAt:new Date()},{merge:true});await db().collection('adminAudit').add({action:'USER_RESTORED',targetUid:req.params.uid,actorUid:req.user.uid,createdAt:new Date()});res.json({ok:true});}catch{res.status(503).json({error:'Could not restore this user.'});}});
 app.put('/api/admin/settings',requireUser,requireOwner,async(req,res)=>{const parsed=z.object({subscriptionPriceGHS:z.number().min(1).max(10000)}).safeParse(req.body);if(!parsed.success)return res.status(400).json({error:'Invalid subscription price.'});try{await appSettings().set({...parsed.data,updatedAt:new Date(),updatedBy:req.user.uid},{merge:true});res.json({ok:true,settings:parsed.data});}catch{res.status(503).json({error:'Could not update settings.'});}});
 app.post('/api/admin/posts/:id/feature',requireUser,requireOwner,async(req,res)=>{try{const featured=Boolean(req.body?.featured);await db().collection('posts').doc(req.params.id).update({featured,featuredAt:featured?new Date():null});res.json({ok:true,featured});}catch{res.status(503).json({error:'Could not update featured status.'});}});
+app.put('/api/admin/categories',requireUser,requireOwner,async(req,res)=>{
+  const parsed=z.object({categories:z.array(z.string().trim().min(2).max(40)).max(50)}).safeParse(req.body);
+  if(!parsed.success)return res.status(400).json({error:'Provide up to 50 category names (2–40 characters each).'});
+  const categories=[...new Set(parsed.data.categories.map(x=>x.trim()).filter(Boolean))];
+  try{await appSettings().set({categories,updatedAt:new Date(),updatedBy:req.user.uid},{merge:true});await db().collection('adminAudit').add({action:'CATEGORIES_UPDATED',actorUid:req.user.uid,details:{count:categories.length},createdAt:new Date()});res.json({ok:true,categories});}
+  catch{res.status(503).json({error:'Could not save categories.'});}
+});
 app.post('/api/admin/announcements',requireUser,requireOwner,async(req,res)=>{const parsed=z.object({title:z.string().trim().min(3).max(100),body:z.string().trim().min(5).max(1000)}).safeParse(req.body);if(!parsed.success)return res.status(400).json({error:'Check announcement fields.'});try{const doc=await db().collection('announcements').add({...parsed.data,active:true,createdAt:new Date(),createdBy:req.user.uid});res.status(201).json({id:doc.id});}catch{res.status(503).json({error:'Could not publish announcement.'});}});
 app.get('/api/admin/export/transactions.csv',requireUser,requireOwner,async(_req,res)=>{try{const snap=await db().collection('transactions').limit(2000).get();const rows=[['reference','uid','amountGHS','currency','status','createdAt'],...snap.docs.map(d=>{const x=d.data();return[d.id,x.uid,(Number(x.amountPesewas)||0)/100,x.currency,x.status,timestamp(x.createdAt)];})];const csv=rows.map(row=>row.map(v=>'"'+String(v??'').replaceAll('"','""')+'"').join(',')).join('\n');res.setHeader('Content-Type','text/csv');res.setHeader('Content-Disposition','attachment; filename="buildwitheli-transactions.csv"');res.send(csv);}catch{res.status(503).json({error:'Export failed.'});}});
 
