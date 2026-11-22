@@ -30,7 +30,7 @@ const profileSchema=z.object({displayName:z.string().trim().min(2).max(60),bio:z
 
 app.get('/api/health',(_req,res)=>res.json({ok:true,service:'buildwitheli-media-api'}));
 app.get('/api/public/posts',async(req,res)=>{
-  try{const category=String(req.query.category||'').trim().slice(0,40);let query=db().collection('posts').where('status','==','PUBLISHED').orderBy('publishedAt','desc');if(category)query=query.where('category','==',category);const snap=await query.limit(60).get();res.json({posts:snap.docs.map(cleanDoc)});}
+  try{const category=String(req.query.category||'').trim().slice(0,40);const snap=await db().collection('posts').where('status','==','PUBLISHED').orderBy('publishedAt','desc').limit(500).get();const published=snap.docs.map(cleanDoc);res.json({posts:(category?published.filter(p=>p.category===category):published).slice(0,60)});}
   catch(e){console.error(e);res.status(503).json({error:'Content feed is not configured.'});}
 });
 app.get('/api/public/posts/:id',async(req,res)=>{
