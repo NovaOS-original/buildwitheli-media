@@ -3,7 +3,7 @@ import {auth,firebaseReady,storage} from './firebase.js';
 import {ref as storageRef,uploadBytes,getDownloadURL} from 'firebase/storage';
 import {onAuthStateChanged,signInWithEmailAndPassword,createUserWithEmailAndPassword,sendEmailVerification,sendPasswordResetEmail,signOut} from 'firebase/auth';
 
-const API=import.meta.env.VITE_API_ORIGIN||'http://localhost:4000';
+const API=import.meta.env.VITE_API_ORIGIN??(import.meta.env.PROD?'':'http://localhost:4000');
 const OWNER_UID=import.meta.env.VITE_OWNER_FIREBASE_UID||'';
 const money=n=>new Intl.NumberFormat('en-GH',{style:'currency',currency:'GHS',maximumFractionDigits:2}).format(Number(n)||0);
 const date=v=>v?new Date(v).toLocaleDateString('en-GH',{day:'numeric',month:'short',year:'numeric'}):'—';
