@@ -39,9 +39,7 @@ services:
         sync: false
       - key: VITE_OWNER_FIREBASE_UID
         sync: false
-      - key: PAYSTACK_SECRET_KEY
         sync: false
-      - key: PAYSTACK_PUBLIC_KEY
         sync: false
-      - key: SUBSCRIPTION_PRICE_GHS
         value: "30"
+
