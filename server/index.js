@@ -4,6 +4,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import crypto from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
@@ -162,5 +163,31 @@ app.post('/api/admin/announcements',requireUser,requireOwner,async(req,res)=>{co
 app.get('/api/admin/export/transactions.csv',requireUser,requireOwner,async(_req,res)=>{try{const snap=await db().collection('transactions').limit(2000).get();const rows=[['reference','uid','amountGHS','currency','status','createdAt'],...snap.docs.map(d=>{const x=d.data();return[d.id,x.uid,(Number(x.amountPesewas)||0)/100,x.currency,x.status,timestamp(x.createdAt)];})];const csv=rows.map(row=>row.map(v=>'"'+String(v??'').replaceAll('"','""')+'"').join(',')).join('\n');res.setHeader('Content-Type','text/csv');res.setHeader('Content-Disposition','attachment; filename="buildwitheli-transactions.csv"');res.send(csv);}catch{res.status(503).json({error:'Export failed.'});}});
 
 // In production the same Node service can serve the built Vite frontend.
-if(process.env.NODE_ENV==='production'){app.use(express.static(dist,{index:false,maxAge:'1h'}));app.get('*',(req,res,next)=>{if(req.path.startsWith('/api/'))return next();res.sendFile(path.join(dist,'index.html'));});}
+if(process.env.NODE_ENV==='production'){
+  app.use(express.static(dist,{index:false,maxAge:'1h'}));
+  const htmlEscape=value=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'","&#39;");
+  app.get('/story/:slug',async(req,res,next)=>{
+    try{
+      const found=await db().collection('posts').where('slug','==',req.params.slug).where('status','==','PUBLISHED').limit(1).get();
+      if(found.empty)return res.status(404).send('Story not found');
+      const post=cleanDoc(found.docs[0]),base=(process.env.APP_ORIGIN||'https://YOUR_PUBLIC_DOMAIN').split(',')[0].replace(/\/$/,'');
+      const canonical=base+'/story/'+encodeURIComponent(post.slug||found.docs[0].id);
+      const description=String(post.excerpt||post.body||'').replace(/\s+/g,' ').slice(0,250);
+      const title=String(post.title||'BUILDWITHELI MEDIA')+' | BUILDWITHELI MEDIA';
+      const image=post.coverImageUrl||base+'/og-default.png';
+      const schema={ '@context':'https://schema.org', '@type':post.type==='VLOG'?'VideoObject':'Article', headline:post.title, description, image:[image], datePublished:post.publishedAt||post.createdAt, author:{'@type':'Person',name:post.authorName||'BUILDWITHELI Creator'}, publisher:{'@type':'Organization',name:'BUILDWITHELI MEDIA'}, mainEntityOfPage:canonical };
+      if(post.type==='VLOG'&&post.videoUrl)schema.contentUrl=post.videoUrl;
+      let html=await readFile(path.join(dist,'index.html'),'utf8');
+      html=html.replace(/<title>[\s\S]*?<\/title>/i,'<title>'+htmlEscape(title)+'</title>');
+      html=html.replace(/<meta name="description"[^>]*>/i,'<meta name="description" content="'+htmlEscape(description)+'" />');
+      html=html.replace(/<link rel="canonical"[^>]*>/i,'<link rel="canonical" href="'+htmlEscape(canonical)+'" />');
+      html=html.replace(/<meta property="og:type"[^>]*>/i,'<meta property="og:type" content="'+(post.type==='VLOG'?'video.other':'article')+'" />');
+      html=html.replace(/<meta property="og:title"[^>]*>/i,'<meta property="og:title" content="'+htmlEscape(title)+'" />');
+      html=html.replace(/<meta property="og:description"[^>]*>/i,'<meta property="og:description" content="'+htmlEscape(description)+'" />');
+      html=html.replace('</head>','<meta property="og:url" content="'+htmlEscape(canonical)+'" /><meta property="og:image" content="'+htmlEscape(image)+'" /><meta name="twitter:card" content="summary_large_image" /><meta name="twitter:title" content="'+htmlEscape(title)+'" /><meta name="twitter:description" content="'+htmlEscape(description)+'" /><meta name="twitter:image" content="'+htmlEscape(image)+'" /><script type="application/ld+json">'+JSON.stringify(schema).replaceAll('<','\\u003c')+'</script></head>');
+      res.type('html').send(html);
+    }catch(e){console.error('Story SEO render failed',e);next(e);}
+  });
+  app.get('*',(req,res,next)=>{if(req.path.startsWith('/api/'))return next();res.sendFile(path.join(dist,'index.html'));});
+}
 app.listen(port,()=>console.log('BUILDWITHELI MEDIA API listening on '+port));
