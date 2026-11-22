@@ -77,53 +77,8 @@ app.get('/api/creator/dashboard',requireUser,async(req,res)=>{
   res.json({profile:profile.exists?profile.data():null,posts:myPosts,canPublish:true,earlyAccess:true,emailVerified:req.user.email_verified});
   }catch(e){console.error(e);res.status(503).json({error:'Creator workspace is unavailable.'});}
 });
-app.get('/api/payments/history',requireUser,async(req,res)=>{
-  try{const snap=await db().collection('transactions').where('uid','==',req.user.uid).limit(100).get();res.json({transactions:snap.docs.map(cleanDoc).sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')))});}
-  catch{res.status(503).json({error:'Payment history is unavailable.'});}
-});
-app.get('/api/payments/status/:reference',requireUser,async(req,res)=>{
-  const reference=String(req.params.reference||'');
-  if(!/^bwm_[a-f0-9]{32}$/i.test(reference))return res.status(400).json({error:'Invalid payment reference.'});
-  try{const snap=await db().collection('transactions').doc(reference).get();if(!snap.exists||snap.data().uid!==req.user.uid)return res.sendStatus(404);const data=snap.data();res.json({reference,status:data.status,verifiedAt:timestamp(data.verifiedAt)});}
-  catch{res.status(503).json({error:'Payment status is unavailable.'});}
-});
-app.post('/api/payments/initialize',requireUser,(_req,res)=>res.status(410).json({error:'Payments are temporarily disabled during free early access.'}));
-/*
-app.post('/api/payments/initialize',requireUser,async(req,res)=>{
-  if(!req.user.email_verified)return res.status(403).json({error:'Verify your email before subscribing.'});
-  if(!process.env.PAYSTACK_SECRET_KEY)return res.status(503).json({error:'Paystack is not configured.'});
-  const amount=Math.round((await getPrice())*100),reference='bwm_'+crypto.randomUUID().replaceAll('-','');
-  try{
-    const response=await fetch('https://api.paystack.co/transaction/initialize',{method:'POST',headers:{Authorization:'Bearer '+process.env.PAYSTACK_SECRET_KEY,'Content-Type':'application/json'},body:JSON.stringify({email:req.user.email,amount,currency:'GHS',reference,callback_url:(process.env.APP_ORIGIN||'http://localhost:5173')+'/payment/return',metadata:{uid:req.user.uid,product:'BUILDWITHELI MEDIA monthly membership'}})});
-    const data=await response.json();if(!response.ok||!data.status)return res.status(502).json({error:'Payment provider could not initialize checkout.'});
-    await db().collection('transactions').doc(reference).create({uid:req.user.uid,reference,amountPesewas:amount,currency:'GHS',status:'INITIALIZED',createdAt:new Date(),provider:'paystack'});
-    res.json({authorization_url:data.data.authorization_url,reference});
-  }catch(e){console.error(e);res.status(502).json({error:'Unable to start checkout.'});}
-});
-app.post('/api/payments/webhook',async(_req,res)=>res.status(410).json({error:'Payments are temporarily disabled during free early access.'}));
-/*
-app.post('/api/payments/webhook',async(req,res)=>{
-  const signature=req.headers['x-paystack-signature'];if(!process.env.PAYSTACK_SECRET_KEY||!signature)return res.sendStatus(401);
-  const expected=crypto.createHmac('sha512',process.env.PAYSTACK_SECRET_KEY).update(req.body).digest('hex');
-  const a=Buffer.from(String(signature)),b=Buffer.from(expected);if(a.length!==b.length||!crypto.timingSafeEqual(a,b))return res.sendStatus(401);
-  let event;try{event=JSON.parse(req.body.toString('utf8'));}catch{return res.sendStatus(400);}
-  if(event.event!=='charge.success')return res.sendStatus(200);
-  const reference=String(event.data?.reference||'');
-  try{
-    const verify=await fetch('https://api.paystack.co/transaction/verify/'+encodeURIComponent(reference),{headers:{Authorization:'Bearer '+process.env.PAYSTACK_SECRET_KEY}});
-    const result=await verify.json();if(!verify.ok||!result.status||result.data.status!=='success')return res.sendStatus(200);
-    const verified=result.data,ref=db().collection('transactions').doc(reference);
-    await db().runTransaction(async t=>{
-      const snap=await t.get(ref);if(!snap.exists)return;const saved=snap.data();if(saved.status==='SUCCESS')return;
-      if(saved.uid!==String(verified.metadata?.uid||'')||saved.amountPesewas!==verified.amount||saved.currency!==verified.currency)return;
-      const subRef=db().collection('subscriptions').doc(saved.uid),subSnap=await t.get(subRef),now=new Date();
-      const currentEnd=subSnap.exists?subSnap.data().expiresAt?.toDate?.():null,start=currentEnd&&currentEnd>now?currentEnd:now;
-      t.set(subRef,{uid:saved.uid,status:'ACTIVE',startedAt:now,expiresAt:new Date(start.getTime()+30*DAY),updatedAt:now},{merge:true});
-      t.update(ref,{status:'SUCCESS',verifiedAt:now,providerTransactionId:String(verified.id)});
-    });res.sendStatus(200);
-  }catch(e){console.error(e);res.sendStatus(500);}
-});
-*/
+app.all('/api/payments/*',(_req,res)=>res.status(410).json({error:'Payments are disabled during free early access.'}));
+
 app.post('/api/creator/posts',requireUser,async(req,res)=>{
   if(!req.user.email_verified)return res.status(403).json({error:'Verify your email first.'});
   const schema=z.object({title:z.string().trim().min(5).max(120),excerpt:z.string().trim().max(280).optional(),body:z.string().trim().min(50).max(50000),category:z.string().trim().min(2).max(40),type:z.enum(['ARTICLE','VLOG']),videoUrl:z.string().url().optional(),coverImageUrl:z.string().url().max(1000).optional().refine(value=>!value||/^https:\/\/[^/]+\/storage\/v1\/object\/public\/creator-media\//.test(value),{message:'Cover images must use the configured public media bucket.'})});
@@ -139,19 +94,15 @@ app.post('/api/creator/posts',requireUser,async(req,res)=>{
 // Super Admin dashboard: every route below is protected by verified Firebase UID.
 app.get('/api/admin/dashboard',requireUser,requireOwner,async(_req,res)=>{
   try{
-    const [usersSnap,postsSnap,txSnap,subsSnap,authUsers,settingsSnap,auditSnap,moderationSnap]=await Promise.all([
+    const [usersSnap,postsSnap,authUsers,settingsSnap,auditSnap,moderationSnap]=await Promise.all([
       db().collection('users').limit(1000).get(),db().collection('posts').limit(500).get(),
-      db().collection('transactions').limit(500).get(),db().collection('subscriptions').limit(1000).get(),
       admin.auth(firebaseAdmin()).listUsers(1000),appSettings().get(),db().collection('adminAudit').orderBy('createdAt','desc').limit(100).get(),db().collection('moderationHistory').orderBy('createdAt','desc').limit(100).get()
     ]);
     const userDocs=new Map(usersSnap.docs.map(d=>[d.id,d.data()]));
     const users=authUsers.users.map(u=>({uid:u.uid,email:u.email||'',displayName:userDocs.get(u.uid)?.displayName||u.displayName||'',status:u.disabled?'SUSPENDED':(userDocs.get(u.uid)?.status||'ACTIVE'),createdAt:u.metadata.creationTime||null,lastSignInAt:u.metadata.lastSignInTime||null}));
-    const posts=postsSnap.docs.map(cleanDoc),transactions=txSnap.docs.map(cleanDoc),subscriptions=subsSnap.docs.map(cleanDoc);
-    const revenue=transactions.filter(t=>t.status==='SUCCESS').reduce((s,t)=>s+(Number(t.amountPesewas)||0),0);
-    const monthMap=new Map();for(const t of transactions.filter(x=>x.status==='SUCCESS')){const m=String(t.createdAt||'').slice(0,7);if(m)monthMap.set(m,(monthMap.get(m)||0)+(Number(t.amountPesewas)||0));}
-    const analytics=[...monthMap.entries()].sort((a,b)=>a[0].localeCompare(b[0])).slice(-6).map(([month,pesewas])=>({month,revenueGHS:pesewas/100}));
-    const now=new Date(),active=subscriptions.filter(s=>activeSubscription(s)).length;
-    res.json({metrics:{users:users.length,creators:users.filter(u=>u.displayName).length,posts:posts.length,pendingPosts:posts.filter(p=>p.status==='PENDING').length,activeSubscriptions:active,transactions:transactions.length,revenueGHS:revenue/100},users,posts:posts.sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||''))),transactions:transactions.sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||''))),subscriptions,analytics,categories:settingsSnap.data()?.categories||[],audit:[...auditSnap.docs.map(d=>({id:d.id,...d.data(),createdAt:timestamp(d.data().createdAt),kind:'ADMIN'})),...moderationSnap.docs.map(d=>({id:d.id,...d.data(),createdAt:timestamp(d.data().createdAt),kind:'MODERATION'}))].sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||''))).slice(0,100),settings:{subscriptionPriceGHS:await getPrice()},generatedAt:now.toISOString()});
+    const posts=postsSnap.docs.map(cleanDoc);
+    const now=new Date();
+    res.json({metrics:{users:users.length,creators:users.filter(u=>u.displayName).length,posts:posts.length,pendingPosts:posts.filter(p=>p.status==='PENDING').length},users,posts:posts.sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||''))),categories:settingsSnap.data()?.categories||[],audit:[...auditSnap.docs.map(d=>({id:d.id,...d.data(),createdAt:timestamp(d.data().createdAt),kind:'ADMIN'})),...moderationSnap.docs.map(d=>({id:d.id,...d.data(),createdAt:timestamp(d.data().createdAt),kind:'MODERATION'}))].sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||''))).slice(0,100),generatedAt:now.toISOString()});
   }catch(e){console.error(e);res.status(503).json({error:'Admin dashboard data could not be loaded.'});}
 });
 app.get('/api/admin/overview',requireUser,requireOwner,async(req,res)=>{try{const [u,p,t]=await Promise.all([db().collection('users').count().get(),db().collection('posts').count().get(),db().collection('transactions').get()]);res.json({users:u.data().count,posts:p.data().count,transactions:t.size,revenueGHS:t.docs.filter(d=>d.data().status==='SUCCESS').reduce((s,d)=>s+(d.data().amountPesewas||0),0)/100});}catch{res.status(503).json({error:'Admin reporting unavailable.'});}});
