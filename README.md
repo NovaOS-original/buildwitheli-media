@@ -1,43 +1,58 @@
 # BUILDWITHELI MEDIA
 
-A creator-led publishing platform for approved blog articles and externally hosted vlog links.
+BUILDWITHELI MEDIA is a creator-led publishing platform for approved articles and externally hosted vlog links.
 
-## Current implementation
+## Current architecture
 
-> **Migration note (2026-11-22):** The live codebase still uses Firebase for authentication and Firestore until the Supabase runtime cutover is completed. The Nova Supabase project now has isolated `bwm_*` tables and a dedicated `bwm-creator-media` bucket provisioned. See [the Supabase migration plan](docs/SUPABASE-MIGRATION.md). Do not remove Firebase configuration or switch production traffic yet.
+- **Frontend:** React + Vite, deployed as a static site on GitHub Pages.
+- **Authentication:** Supabase Auth (email/password, email verification, password reset).
+- **Database:** Supabase Postgres with Row Level Security (RLS).
+- **Media:** Supabase Storage bucket `bwm-creator-media` (JPG, PNG and WebP; 8 MiB maximum).
+- **Deployment:** GitHub Actions builds the static site for GitHub Pages.
+- **Payments:** Disabled for the current free early-access launch.
+- **Email:** Existing Supabase custom Gmail SMTP remains responsible for authentication emails. The Resend integration is postponed until a verified sending domain is available.
 
-- Firebase email/password registration, login, verification and password reset.
-- Creator workspace for profile editing, subscription status, article/vlog submission, submission tracking and payment history.
-- Free early access: no checkout, payment collection or paid subscription requirement. Creator publishing access is enabled after email verification.
-- New content is private and pending editorial review until an owner approves it.
-- Super Admin dashboard for moderation, user suspension/restoration, transaction review, revenue analytics, featured content, subscription price settings, announcements and CSV transaction export.
-- Express API serves the production Vite build when deployed as a Node service.
+The current site does not require a Firebase runtime, Firestore, an Express server, Render hosting or Paystack for its active publishing workflow. Older Firebase/Render instructions have been retired; see the current deployment guide in `docs/PRODUCTION-DEPLOYMENT.md`.
 
-## Local setup
+## Main features
+
+- Public discovery of approved stories and categories.
+- Creator registration, email verification and Super Admin approval.
+- Creator profile editing and story/vlog submissions.
+- Editorial moderation before public publication.
+- Super Admin controls for creator approvals, suspension, content moderation, featured stories, categories, announcements, support requests and audit history.
+- Terms & Conditions and Privacy Policy pages.
+
+## Local development
 
 1. Install Node.js 20 or newer.
-2. Copy `.env.example` to `.env` and fill in credentials locally.
-3. Run `npm install`.
-4. Run `npm run dev` (Vite at http://localhost:5173; API at http://localhost:4000).
-5. Run `npm test` and `npm run build` before pushing changes.
+2. Run `npm install`.
+3. Run `npm run dev` to start Vite.
+4. Run `npm test` and `npm run build` before publishing changes.
 
-## Required configuration
+The Supabase URL and publishable key are configured in `src/supabase.js` with optional Vite environment overrides. A Supabase publishable key is designed for browser use; it is not a secret. **Never place a Supabase service-role key, Resend API key, SMTP password or other server secret in frontend code or a `VITE_*` variable.**
 
-- Firebase Authentication (Email/Password), Firestore and a Firebase Admin service account (temporary until the documented Supabase Auth/Postgres cutover).
-- Set `OWNER_FIREBASE_UID` and `VITE_OWNER_FIREBASE_UID` to the owner's verified Firebase UID. The server enforces owner access; the Vite value only displays the admin navigation.
-- Replace the owner UID placeholder in `firestore.rules` and deploy the rules.
-- Payments are disabled for the initial hosted launch. Paystack configuration is intentionally omitted.
-- Configure `APP_ORIGIN` and `VITE_API_ORIGIN` for the chosen deployment.
+## Database and access-control notes
 
-## Production setup
+- BWM tables are namespaced with `bwm_` to avoid collisions with other Nova applications.
+- RLS is enabled on the BWM tables.
+- Public visitors can read published stories and approved creator display names only.
+- Creator profile email addresses are not selectable through the public or authenticated table API. Super Admin user listings use a guarded database function.
+- Creator media writes are restricted to the authenticated, verified, approved creator's own UID folder.
+- The media bucket is public so published story images can load without sign-in. Do not upload confidential or private documents to it.
+- Tables for future payments/subscriptions and other Nova apps remain closed to direct `anon` and `authenticated` table access unless a specific, reviewed policy is added.
 
-A Render Node-service blueprint is provided in `render.yaml`; Firebase rules deployment configuration is provided in `firebase.json`. Follow [docs/PRODUCTION-DEPLOYMENT.md](docs/PRODUCTION-DEPLOYMENT.md) to configure the current Firebase-backed API and Render hosting. Payment integration is disabled. Cloud credentials and owner UID must be supplied securely in the provider dashboards; they are not stored in GitHub. Production hosting and real Firebase/Paystack integration are not considered verified until the deployed checks in that guide pass.
+## Production safety
 
-The application includes Supabase Storage cover uploads (server-side service-role access), public story/category/sitemap routes, production story metadata, a free early-access publishing mode and unit/source tests. Remaining operational work includes expiry status reconciliation/automation, refunds and chargebacks, media cleanup, scalable admin pagination, and real cloud end-to-end verification.
+- Keep Supabase Auth SMTP settings unchanged unless deliberately planning an email-provider migration.
+- Configure the exact GitHub Pages URL in Supabase Auth's Site URL and allowed redirect URLs.
+- Enable Supabase leaked-password protection in Authentication → Settings → Password Security.
+- Review Supabase Security Advisors after database changes.
+- Never commit `.env`, private keys, SMTP credentials, service-role keys or API tokens.
 
-Never commit `.env`, Firebase service-account JSON, private keys or Supabase service-role keys.
+## Project references
 
-
-### Creator cover images
-
-Creator cover-image uploads use a public Supabase Storage bucket named `creator-media`. Configure `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` on the server only. Uploads are authenticated through Firebase, scoped to the creator's UID folder, and limited to JPG, PNG or WebP up to 8 MB. The Supabase Free plan includes 1 GB file storage; free projects may pause after one week of inactivity.
+- Live site: https://novaos-original.github.io/buildwitheli-media/
+- GitHub repository: https://github.com/NovaOS-original/buildwitheli-media
+- Supabase project ref: `xtchvetdluriblzyknhp`
+- Supabase project URL: https://xtchvetdluriblzyknhp.supabase.co
