@@ -46,7 +46,7 @@ The Supabase URL and publishable key are configured in `src/supabase.js` with op
 
 - Keep Supabase Auth SMTP settings unchanged unless deliberately planning an email-provider migration.
 - Configure the exact GitHub Pages URL in Supabase Auth's Site URL and allowed redirect URLs.
-- Enable Supabase leaked-password protection in Authentication → Settings → Password Security.
+- The application requires 12-character passwords with uppercase/lowercase letters, a number and a symbol for registration and password changes. Supabase's built-in leaked-password protection requires Pro plan or above; it is not available on the current Free plan.
 - Review Supabase Security Advisors after database changes.
 - Never commit `.env`, private keys, SMTP credentials, service-role keys or API tokens.
 
