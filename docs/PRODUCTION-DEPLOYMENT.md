@@ -33,7 +33,7 @@ The existing Gmail custom SMTP configuration is working and must not be changed 
 
 ### Leaked password protection
 
-In Supabase Dashboard → Authentication → Settings → Password Security, enable **Leaked Password Protection**. Supabase checks new or changed passwords against known compromised-password data. This is an Auth project setting and is not controlled by the website's React code or Postgres RLS.
+The site enforces a 12-character minimum with uppercase/lowercase letters, a number and a symbol in its registration and password-change forms. Set the same minimum length and character requirements in Supabase Authentication → Settings if those controls are available in your project. Supabase's built-in **Leaked Password Protection** uses the HaveIBeenPwned Pwned Passwords API, but Supabase documents this feature as Pro plan and above; it cannot be enabled on the current Free plan. Do not claim this check is active until the project is upgraded and the setting is enabled.
 
 ### Storage
 
