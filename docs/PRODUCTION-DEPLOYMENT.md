@@ -74,7 +74,7 @@ The build's sitemap generator retrieves published BWM story metadata using the p
 - [ ] GitHub Pages deployment succeeds and the public homepage loads.
 - [ ] Creator registration and verification email work.
 - [ ] Sign-in, sign-out and password reset work.
-- [ ] Leaked Password Protection is enabled in Supabase Auth.
+- [ ] Supabase Auth minimum length and character requirements match the site's 12-character password policy.\n- [ ] If the project is upgraded to Pro or above, enable and verify Supabase Leaked Password Protection.
 - [ ] An unapproved creator cannot submit content or upload cover media.
 - [ ] An approved creator can submit a story and upload only to their own UID folder.
 - [ ] Pending/rejected content is not visible publicly.
