@@ -4,7 +4,7 @@ const APP_URL = 'https://novaos-original.github.io/buildwitheli-media/';
 const date=v=>v?new Date(v).toLocaleDateString('en-GH',{day:'numeric',month:'short',year:'numeric'}):'—';
 const slug=s=>s.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,70)+'-'+crypto.randomUUID().slice(0,8);
 const msg=e=>e?.message||'Something went wrong. Please try again.';
-const strongPassword=value=>value.length>=12&&/[a-z]/.test(value)&&/[A-Z]/.test(value)&&/\\d/.test(value)&&/[^A-Za-z0-9]/.test(value);
+const strongPassword=value=>value.length>=12&&/[a-z]/.test(value)&&/[A-Z]/.test(value)&&/\d/.test(value)&&/[^A-Za-z0-9]/.test(value);
 const authError=e=>{const s=msg(e);if(/550|testing emails|verify a domain|resend\.com\/domains|unexpected_failure|sending confirmation email|gomail|smtp/i.test(s))return 'We could not send the verification email. Please check the email address and try again later, or contact support if the problem continues.';if(/over_email_send_rate_limit|429/i.test(s))return 'Please wait before requesting another email. The email provider has a short security cooldown.';return s;};
 function App(){
  const [user,setUser]=useState(null),[profile,setProfile]=useState(null),[mode,setMode]=useState('register'),[name,setName]=useState(''),[email,setEmail]=useState(''),[password,setPassword]=useState('');
