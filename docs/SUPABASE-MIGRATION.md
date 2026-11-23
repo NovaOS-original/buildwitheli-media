@@ -1,57 +1,59 @@
-# Supabase migration status — BUILDWITHELI MEDIA
+# Supabase implementation status — BUILDWITHELI MEDIA
 
-## Selected project
+## Active project
 
-BUILDWITHELI MEDIA is using the existing Supabase project **Nova** temporarily as its primary Supabase project:
+BUILDWITHELI MEDIA currently uses the existing Nova Supabase project:
 
 - Project ref: `xtchvetdluriblzyknhp`
+- Project URL: https://xtchvetdluriblzyknhp.supabase.co
 - Region: `eu-west-1`
-- Project URL: `https://xtchvetdluriblzyknhp.supabase.co`
 
-The separate BUILDWITHELI MEDIA Supabase organization was not accessible through the connected account at the time this migration started. This choice follows the owner's instruction to use the currently available project.
+Nova hosts other applications too. Do not rename, drop, truncate, or repurpose their tables, buckets, or Edge Functions.
 
-## Isolation and preservation
+## Current runtime
 
-Nova already hosts data for other applications. Do not rename, drop, truncate, or repurpose existing Nova tables or buckets.
+The production frontend is a React/Vite static site on GitHub Pages. It connects directly to Supabase using the project's browser-safe publishable key.
 
-BUILDWITHELI MEDIA has its own namespaced tables:
+- Supabase Auth handles creator registration, email verification, login and password reset.
+- Postgres stores BWM profiles, stories, moderation, settings, announcements, support requests and audit records.
+- Supabase Storage hosts creator cover images.
+- No Firebase Auth/Firestore or Express/Render backend is required by the current publishing frontend.
+- Existing Gmail SMTP for Supabase Auth is intentionally retained.
+- Resend-based creator notification emails are postponed until a verified sending domain is available.
 
-- `bwm_profiles`
-- `bwm_posts`
-- `bwm_subscriptions`
-- `bwm_transactions`
-- `bwm_app_settings`
-- `bwm_moderation_history`
-- `bwm_admin_audit`
-- `bwm_announcements`
+## BWM data isolation and security
 
-All eight tables have Row Level Security enabled. Direct `anon` and `authenticated` table privileges are revoked; the planned Node API accesses them using the server-only Supabase service-role key. Never place that key in Vite variables or browser code.
+BWM data uses the `bwm_*` namespace. Row Level Security is enabled on the BWM tables.
 
-A dedicated public-read bucket, `bwm-creator-media`, has been created with an 8 MiB limit and JPG, PNG, and WebP allowlist. Uploads must be performed by the trusted API using the service-role key. The existing `social-media-published` bucket remains untouched.
+Recent security hardening:
 
-## Current implementation status
+- Replaced broad profile SELECT policies with a single scoped policy.
+- Revoked table-wide profile SELECT and granted only the profile columns needed by each client role.
+- Public visitors can read only approved/active creator IDs and display names.
+- Authenticated users cannot select creator email addresses or email-verification fields through the table API.
+- Super Admin user listings call `public.bwm_admin_list_profiles()`, an invoker wrapper around a private, owner-checked function. Anonymous users cannot execute the RPC.
+- Creator media upload/update/delete policies check the signed-in user's own folder and a private server-side eligibility check.
+- Consolidated duplicate BWM moderation-history INSERT and post DELETE policies.
+- Revoked direct `anon` and `authenticated` table privileges from future payment/subscription tables and unrelated Nova application tables that intentionally have no client RLS policies.
 
-The database schema and media bucket have been provisioned and verified in Nova. The application code still contains Firebase Authentication and Firestore Admin integration at this point. **The runtime migration is not complete yet**: do not remove Firebase dependencies or switch production traffic until the Supabase Auth and Postgres API implementation, tests, and deployment environment variables are ready.
+The `bwm-creator-media` bucket is public so published cover images can be served to visitors. It has an 8 MiB limit and allows JPG, PNG and WebP. Do not use it for confidential material.
 
-## Planned cutover sequence
+## Other Nova applications
 
-1. Replace Firebase browser authentication with Supabase Auth (email/password, verification, password reset, session restore).
-2. Replace Firebase Admin token verification with server-side Supabase user verification; check suspended profiles and enforce owner access using a verified Supabase user UUID configured only on the server.
-3. Move creator profiles, posts, subscriptions, transactions, settings, moderation history, audit events, and announcements to the `bwm_*` tables.
-4. Change creator image uploads to `bwm-creator-media`, preserving the 8 MiB and MIME-type restrictions.
-5. Remove Firebase packages, configuration, rules, and deployment references only after the new implementation passes tests.
-6. Set production secrets in the Node host, run end-to-end tests using Paystack TEST mode, and verify registration, moderation, payment webhook verification, subscription expiry checks, and admin authorization before cutover.
+The following are not part of the BWM publishing frontend and must remain untouched unless separately requested:
 
-## Required server configuration at cutover
+- Existing LoveSpark tables and the `lovespark-link` Edge Function.
+- Social media publishing tables, the `social-media-ingest` Edge Function and `social-media-published` bucket.
+- Other Nova OS tables and application resources.
 
-- `SUPABASE_URL=https://xtchvetdluriblzyknhp.supabase.co`
-- `SUPABASE_PUBLISHABLE_KEY` (or the project's publishable key; safe for client identification, but server should still verify user JWTs)
-- `SUPABASE_SERVICE_ROLE_KEY` (server-only secret; never share in chat or commit)
-- `OWNER_SUPABASE_UID` (the owner's immutable UUID after creating and verifying the owner account in Supabase Auth)
-- Existing Paystack TEST credentials and canonical `APP_ORIGIN`
+Direct Data API privileges for tables without client-facing RLS policies have been revoked. Trusted Edge Functions using server-side credentials are not affected by these table grants.
 
-The project's publishable key can be retrieved from Supabase Project Settings → API Keys. Keep the service-role key only in the local server environment or hosting provider's secret manager.
+## Backup and change discipline
 
-## Backup note
+Nova is the active project, not a second independent backup. Keep independent backups of important data and media. Before future schema changes:
 
-Nova is currently the selected primary project, not an independent backup. A second Supabase project or external backup destination is required for disaster recovery. No cross-project replication is enabled, and no backup data is being written to another project.
+1. Inspect existing policies, grants, triggers and functions.
+2. Make the smallest isolated change.
+3. Verify grants and RLS behavior after the change.
+4. Run Supabase Security and Performance Advisors.
+5. Never expose service-role keys or SMTP/API secrets in the browser or GitHub.
