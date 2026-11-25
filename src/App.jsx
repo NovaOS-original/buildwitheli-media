@@ -61,7 +61,7 @@ function App(){
    setAuthReady(true);
    if(!session?.user){clearTimers();applySignedOut(event);return;}
    const nextUser=session.user,nextId=nextUser.id,previousId=authUserIdRef.current;
-   if(previousId&&previousId!==nextId){profileRequestRef.current++;loadedProfileUserIdRef.current=null;profileLoadUserIdRef.current=null;setProfile(null);setMyPosts([]);setAdmin(null);}
+   if(previousId&&previousId!==nextId){clearTimers();profileRequestRef.current++;loadedProfileUserIdRef.current=null;profileLoadUserIdRef.current=null;setProfile(null);setMyPosts([]);setAdmin(null);}
    authUserIdRef.current=nextId;setUser(nextUser);
    // A token refresh changes credentials, not the user's database profile.
    // Never refetch the profile for a routine refresh when it is already loaded.
