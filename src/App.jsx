@@ -12,8 +12,8 @@ function App(){
  const [notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[posts,setPosts]=useState([]),[categories,setCategories]=useState([]),[announcement,setAnnouncement]=useState(null);
  const [view,setView]=useState('home'),[story,setStory]=useState(null),[filter,setFilter]=useState(''),[creatorTab,setCreatorTab]=useState('overview'),[adminTab,setAdminTab]=useState('overview'),[myPosts,setMyPosts]=useState([]),[admin,setAdmin]=useState(null),[legalDoc,setLegalDoc]=useState('terms'),[termsAccepted,setTermsAccepted]=useState(false);
  const owner=profileReady&&profile?.role==='OWNER'&&profile?.status==='ACTIVE',approved=profileReady&&profile?.approval_status==='APPROVED'&&profile?.status==='ACTIVE';
- const profileRequestRef=useRef(0),authUserIdRef=useRef(null),profileRef=useRef(null),loadedProfileUserIdRef=useRef(null),profileLoadUserIdRef=useRef(null),authTimersRef=useRef(new Set());
- const loadProfile=useCallback(async id=>{const request=++profileRequestRef.current;const r=await supabase.from('bwm_profiles').select('id,display_name,bio,website,avatar_url,status,role,approval_status,terms_version,terms_accepted_at,created_at,updated_at').eq('id',id).maybeSingle();if(r.error)throw r.error;if(request===profileRequestRef.current){profileRef.current=r.data;loadedProfileUserIdRef.current=id;setProfile(r.data);}return r.data;},[]);
+ const profileRequestRef=useRef(0),authUserIdRef=useRef(null),loadedProfileUserIdRef=useRef(null),profileLoadUserIdRef=useRef(null),authTimersRef=useRef(new Set());
+ const loadProfile=useCallback(async id=>{const request=++profileRequestRef.current;const r=await supabase.from('bwm_profiles').select('id,display_name,bio,website,avatar_url,status,role,approval_status,terms_version,terms_accepted_at,created_at,updated_at').eq('id',id).maybeSingle();if(r.error)throw r.error;if(request===profileRequestRef.current){loadedProfileUserIdRef.current=id;setProfile(r.data);}return r.data;},[]);
  const loadPublic=useCallback(async()=>{
   const [c,a]=await Promise.all([supabase.from('bwm_app_settings').select('categories').eq('id',true).maybeSingle(),supabase.from('bwm_announcements').select('*').eq('active',true).order('created_at',{ascending:false}).limit(1)]);
   if(c.error)throw c.error;if(a.error)throw a.error;
@@ -23,18 +23,20 @@ function App(){
   if(ids.length){const q=await supabase.from('bwm_profiles').select('id,display_name').in('id',ids);if(!q.error)authors=Object.fromEntries((q.data||[]).map(x=>[x.id,x.display_name]));}
   setPosts(published.map(x=>({...x,authorName:authors[x.author_id]||'BUILDWITHELI CREATOR'})));setCategories(c.data?.categories||[]);setAnnouncement(a.data?.[0]||null);
  },[]);
- const loadCreator=useCallback(async()=>{if(!user)return;const p=await supabase.from('bwm_posts').select('*').eq('author_id',user.id).order('created_at',{ascending:false}).limit(100);if(p.error)throw p.error;setMyPosts(p.data||[]);},[user]);
+ const loadCreator=useCallback(async()=>{if(!user)return;const requestUserId=user.id;const p=await supabase.from('bwm_posts').select('*').eq('author_id',requestUserId).order('created_at',{ascending:false}).limit(100);if(p.error)throw p.error;if(authUserIdRef.current===requestUserId)setMyPosts(p.data||[]);},[user]);
  const loadAdmin=useCallback(async()=>{
+  const requestUserId=authUserIdRef.current;if(!requestUserId)return;
   const [u,p,s,a,m,n,h]=await Promise.all([supabase.rpc('bwm_admin_list_profiles'),supabase.from('bwm_posts').select('*').order('created_at',{ascending:false}).limit(1000),supabase.from('bwm_app_settings').select('*').eq('id',true).maybeSingle(),supabase.from('bwm_admin_audit').select('*').order('created_at',{ascending:false}).limit(100),supabase.from('bwm_moderation_history').select('*').order('created_at',{ascending:false}).limit(100),supabase.from('bwm_announcements').select('*').order('created_at',{ascending:false}).limit(50),supabase.from('bwm_support_requests').select('*').gte('created_at',new Date(Date.now()-48*60*60*1000).toISOString()).order('created_at',{ascending:false}).limit(500)]);
   const bad=[u,p,s,a,m,n,h].find(x=>x.error);if(bad)throw bad.error;const ids=[...new Set((p.data||[]).map(x=>x.author_id))];let authors={};if(ids.length){const q=await supabase.from('bwm_profiles').select('id,display_name').in('id',ids);if(!q.error)authors=Object.fromEntries((q.data||[]).map(x=>[x.id,x.display_name]));}
   const allp=(p.data||[]).map(x=>({...x,authorName:authors[x.author_id]||'Creator'})),users=u.data||[];
+  if(authUserIdRef.current!==requestUserId)return;
   setAdmin({users,posts:allp,settings:s.data||{categories:[]},audit:a.data||[],history:m.data||[],announcements:n.data||[],support:h.data||[],metrics:{users:users.length,creators:users.filter(x=>x.role==='CREATOR').length,pendingCreators:users.filter(x=>x.role==='CREATOR'&&x.approval_status==='PENDING'&&x.email_verified).length,pendingPosts:allp.filter(x=>x.status==='PENDING').length,published:allp.filter(x=>x.status==='PUBLISHED').length,posts:allp.length}});
  },[]);
  useEffect(()=>{
   let live=true;
   const clearTimers=()=>{for(const timer of authTimersRef.current)clearTimeout(timer);authTimersRef.current.clear();};
   const applySignedOut=event=>{
-   authUserIdRef.current=null;profileRequestRef.current++;profileRef.current=null;loadedProfileUserIdRef.current=null;profileLoadUserIdRef.current=null;
+   authUserIdRef.current=null;profileRequestRef.current++;loadedProfileUserIdRef.current=null;profileLoadUserIdRef.current=null;
    setUser(null);setProfile(null);setProfileReady(true);setMyPosts([]);setAdmin(null);setView('home');
    if(event==='SIGNED_OUT')setNotice('Your session has ended. Please sign in again to continue.');
   };
@@ -59,6 +61,7 @@ function App(){
    setAuthReady(true);
    if(!session?.user){clearTimers();applySignedOut(event);return;}
    const nextUser=session.user,nextId=nextUser.id,previousId=authUserIdRef.current;
+   if(previousId&&previousId!==nextId){profileRequestRef.current++;loadedProfileUserIdRef.current=null;profileLoadUserIdRef.current=null;setProfile(null);setMyPosts([]);setAdmin(null);}
    authUserIdRef.current=nextId;setUser(nextUser);
    // A token refresh changes credentials, not the user's database profile.
    // Never refetch the profile for a routine refresh when it is already loaded.
@@ -93,8 +96,8 @@ function App(){
  async function announce(e){e.preventDefault();const f=new FormData(e.currentTarget),r=await supabase.from('bwm_announcements').insert({title:String(f.get('title')).trim(),body:String(f.get('body')).trim(),active:true,created_by:user.id});if(r.error){setNotice(msg(r.error));return;}await audit('ANNOUNCEMENT_PUBLISHED');await loadAdmin();e.currentTarget.reset();setNotice('Announcement published.');}
  async function submitSupport(e){e.preventDefault();const f=new FormData(e.currentTarget),payload={name:String(f.get('name')).trim(),email:String(f.get('email')).trim(),category:String(f.get('category')),message:String(f.get('message')).trim(),status:'OPEN'};if(payload.name.length<2||payload.message.length<10){setNotice('Please provide your name and a message of at least 10 characters.');return;}setBusy(true);try{const r=await supabase.from('bwm_support_requests').insert(payload);if(r.error)throw r.error;e.currentTarget.reset();setNotice('Your help request has been sent to the Super Admin team.');}catch(e){setNotice(msg(e));}finally{setBusy(false);}}
  async function updateSupportStatus(id,status){try{const r=await supabase.from('bwm_support_requests').update({status,updated_at:new Date().toISOString()}).eq('id',id);if(r.error)throw r.error;await loadAdmin();setNotice('Support request updated.');}catch(e){setNotice(msg(e));}}
- const refreshSupport=useCallback(async()=>{const r=await supabase.from('bwm_support_requests').select('*').gte('created_at',new Date(Date.now()-48*60*60*1000).toISOString()).order('created_at',{ascending:false}).limit(500);if(r.error)throw r.error;setAdmin(prev=>prev?{...prev,support:r.data||[]}:prev);},[]);
- useEffect(()=>{if(!authReady||!profileReady||!user||!owner||view!=='admin')return;const timer=setInterval(()=>refreshSupport().catch(()=>{}),30000);return()=>clearInterval(timer);},[authReady,profileReady,user,owner,view,refreshSupport]);
+ const refreshSupport=useCallback(async()=>{const requestUserId=authUserIdRef.current;if(!requestUserId)return;const r=await supabase.from('bwm_support_requests').select('*').gte('created_at',new Date(Date.now()-48*60*60*1000).toISOString()).order('created_at',{ascending:false}).limit(500);if(r.error)throw r.error;if(authUserIdRef.current===requestUserId)setAdmin(prev=>prev?{...prev,support:r.data||[]}:prev);},[]);
+ useEffect(()=>{if(!authReady||!profileReady||!user||!owner||view!=='admin')return;let active=true,timer=null;const poll=async()=>{try{await refreshSupport();}catch(e){if(active)setNotice('Support queue refresh failed: '+msg(e));}finally{if(active)timer=setTimeout(poll,30000);}};timer=setTimeout(poll,30000);return()=>{active=false;if(timer!==null)clearTimeout(timer);};},[authReady,profileReady,user,owner,view,refreshSupport]);
  const pendingCreators=useMemo(()=>admin?.users.filter(x=>x.role==='CREATOR'&&x.approval_status==='PENDING'&&x.email_verified)||[],[admin]),pendingPosts=useMemo(()=>admin?.posts.filter(x=>x.status==='PENDING')||[],[admin]);
  const shown=filter?posts.filter(x=>x.category===filter):posts;
  const home=()=>{history.pushState({},'',new URL('./',APP_URL).pathname);setView('home');setStory(null);scrollTo(0,0);},register=()=>{setMode('register');setView('home');setTimeout(()=>document.getElementById('account')?.scrollIntoView({behavior:'smooth'}),20);},openLegal=doc=>{setLegalDoc(doc);setView('legal');scrollTo(0,0);},openHelp=()=>{setView('help');scrollTo(0,0);};
