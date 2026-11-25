@@ -7,6 +7,9 @@ export const supabase = createClient(url, publishableKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: true
+    detectSessionInUrl: true,
+    // GitHub Pages sites share one origin and localStorage across paths.
+    // Isolate BUILDWITHELI MEDIA from other Nova OS apps using this Supabase project.
+    storageKey: 'bwm-media-auth-v1'
   }
 });
