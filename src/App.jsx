@@ -1,5 +1,6 @@
 import React,{useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {supabase} from './supabase.js';
+import {shouldLoadProfileForAuthEvent} from './auth-session.js';
 const APP_URL = 'https://novaos-original.github.io/buildwitheli-media/';
 const date=v=>v?new Date(v).toLocaleDateString('en-GH',{day:'numeric',month:'short',year:'numeric'}):'—';
 const slug=s=>s.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,70)+'-'+crypto.randomUUID().slice(0,8);
@@ -11,25 +12,70 @@ function App(){
  const [notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[posts,setPosts]=useState([]),[categories,setCategories]=useState([]),[announcement,setAnnouncement]=useState(null);
  const [view,setView]=useState('home'),[story,setStory]=useState(null),[filter,setFilter]=useState(''),[creatorTab,setCreatorTab]=useState('overview'),[adminTab,setAdminTab]=useState('overview'),[myPosts,setMyPosts]=useState([]),[admin,setAdmin]=useState(null),[legalDoc,setLegalDoc]=useState('terms'),[termsAccepted,setTermsAccepted]=useState(false);
  const owner=profileReady&&profile?.role==='OWNER'&&profile?.status==='ACTIVE',approved=profileReady&&profile?.approval_status==='APPROVED'&&profile?.status==='ACTIVE';
- const profileRequestRef=useRef(0),authUserIdRef=useRef(null);
- const loadProfile=useCallback(async id=>{const request=++profileRequestRef.current;const r=await supabase.from('bwm_profiles').select('id,display_name,bio,website,avatar_url,status,role,approval_status,terms_version,terms_accepted_at,created_at,updated_at').eq('id',id).maybeSingle();if(r.error)throw r.error;if(request===profileRequestRef.current)setProfile(r.data);return r.data;},[]);
+ const profileRequestRef=useRef(0),authUserIdRef=useRef(null),loadedProfileUserIdRef=useRef(null),profileLoadUserIdRef=useRef(null),authTimersRef=useRef(new Set());
+ const loadProfile=useCallback(async id=>{const request=++profileRequestRef.current;const r=await supabase.from('bwm_profiles').select('id,display_name,bio,website,avatar_url,status,role,approval_status,terms_version,terms_accepted_at,created_at,updated_at').eq('id',id).maybeSingle();if(r.error)throw r.error;if(request===profileRequestRef.current){loadedProfileUserIdRef.current=id;setProfile(r.data);}return r.data;},[]);
  const loadPublic=useCallback(async()=>{
   const [c,a]=await Promise.all([supabase.from('bwm_app_settings').select('categories').eq('id',true).maybeSingle(),supabase.from('bwm_announcements').select('*').eq('active',true).order('created_at',{ascending:false}).limit(1)]);
   if(c.error)throw c.error;if(a.error)throw a.error;
   // Fetch every published story in bounded pages; this runs for logged-out visitors too.
-  const published=[];for(let from=0;;from+=500){const page=await supabase.from('bwm_posts').select('*').eq('status','PUBLISHED').order('published_at',{ascending:false}).range(from,from+499);if(page.error)throw page.error;published.push(...(page.data||[]));if((page.data||[]).length<500)break;}
+  const published=[];const pageSize=500,maxPages=20;for(let pageIndex=0;pageIndex<maxPages;pageIndex++){const from=pageIndex*pageSize;const page=await supabase.from('bwm_posts').select('*').eq('status','PUBLISHED').order('published_at',{ascending:false}).range(from,from+pageSize-1);if(page.error)throw page.error;const rows=page.data||[];published.push(...rows);if(rows.length<pageSize)break;}
   const ids=[...new Set(published.map(x=>x.author_id))];let authors={};
   if(ids.length){const q=await supabase.from('bwm_profiles').select('id,display_name').in('id',ids);if(!q.error)authors=Object.fromEntries((q.data||[]).map(x=>[x.id,x.display_name]));}
   setPosts(published.map(x=>({...x,authorName:authors[x.author_id]||'BUILDWITHELI CREATOR'})));setCategories(c.data?.categories||[]);setAnnouncement(a.data?.[0]||null);
  },[]);
- const loadCreator=useCallback(async()=>{if(!user)return;const p=await supabase.from('bwm_posts').select('*').eq('author_id',user.id).order('created_at',{ascending:false}).limit(100);if(p.error)throw p.error;setMyPosts(p.data||[]);},[user]);
+ const loadCreator=useCallback(async()=>{if(!user)return;const requestUserId=user.id;const p=await supabase.from('bwm_posts').select('*').eq('author_id',requestUserId).order('created_at',{ascending:false}).limit(100);if(p.error)throw p.error;if(authUserIdRef.current===requestUserId)setMyPosts(p.data||[]);},[user]);
  const loadAdmin=useCallback(async()=>{
+  const requestUserId=authUserIdRef.current;if(!requestUserId)return;
   const [u,p,s,a,m,n,h]=await Promise.all([supabase.rpc('bwm_admin_list_profiles'),supabase.from('bwm_posts').select('*').order('created_at',{ascending:false}).limit(1000),supabase.from('bwm_app_settings').select('*').eq('id',true).maybeSingle(),supabase.from('bwm_admin_audit').select('*').order('created_at',{ascending:false}).limit(100),supabase.from('bwm_moderation_history').select('*').order('created_at',{ascending:false}).limit(100),supabase.from('bwm_announcements').select('*').order('created_at',{ascending:false}).limit(50),supabase.from('bwm_support_requests').select('*').gte('created_at',new Date(Date.now()-48*60*60*1000).toISOString()).order('created_at',{ascending:false}).limit(500)]);
   const bad=[u,p,s,a,m,n,h].find(x=>x.error);if(bad)throw bad.error;const ids=[...new Set((p.data||[]).map(x=>x.author_id))];let authors={};if(ids.length){const q=await supabase.from('bwm_profiles').select('id,display_name').in('id',ids);if(!q.error)authors=Object.fromEntries((q.data||[]).map(x=>[x.id,x.display_name]));}
   const allp=(p.data||[]).map(x=>({...x,authorName:authors[x.author_id]||'Creator'})),users=u.data||[];
+  if(authUserIdRef.current!==requestUserId)return;
   setAdmin({users,posts:allp,settings:s.data||{categories:[]},audit:a.data||[],history:m.data||[],announcements:n.data||[],support:h.data||[],metrics:{users:users.length,creators:users.filter(x=>x.role==='CREATOR').length,pendingCreators:users.filter(x=>x.role==='CREATOR'&&x.approval_status==='PENDING'&&x.email_verified).length,pendingPosts:allp.filter(x=>x.status==='PENDING').length,published:allp.filter(x=>x.status==='PUBLISHED').length,posts:allp.length}});
  },[]);
- useEffect(()=>{let live=true,authEventSeen=false;const applySignedOut=event=>{authUserIdRef.current=null;profileRequestRef.current++;setUser(null);setProfile(null);setProfileReady(true);setMyPosts([]);setAdmin(null);setView('home');if(event==='SIGNED_OUT')setNotice('Your session has ended. Please sign in again to continue.');};const {data:{subscription}}=supabase.auth.onAuthStateChange((event,session)=>{authEventSeen=true;if(event==='PASSWORD_RECOVERY'){setMode('update');setNotice('Choose a new password for your account.');}setAuthReady(true);if(!session?.user){applySignedOut(event);return;}const nextUser=session.user;authUserIdRef.current=nextUser.id;setUser(nextUser);setProfileReady(false);if(event==='TOKEN_REFRESHED'&&profile?.id===nextUser.id){setProfileReady(true);return;}setTimeout(()=>{if(!live)return;loadProfile(nextUser.id).then(p=>{if(live&&authUserIdRef.current===nextUser.id){setProfileReady(true);setView(p?.role==='OWNER'&&p?.status==='ACTIVE'?'admin':'creator');}}).catch(e=>{if(live&&authUserIdRef.current===nextUser.id){setProfileReady(false);setNotice(msg(e));}});},0);});supabase.auth.getSession().then(async({data,error})=>{if(!live||authEventSeen)return;if(error){setAuthReady(true);setProfileReady(true);setNotice(msg(error));return;}const session=data.session;if(!session?.user){applySignedOut('INITIAL_SESSION');setAuthReady(true);return;}authUserIdRef.current=session.user.id;setUser(session.user);setProfileReady(false);try{const p=await loadProfile(session.user.id);if(live&&authUserIdRef.current===session.user.id){setProfileReady(true);setView(p?.role==='OWNER'&&p?.status==='ACTIVE'?'admin':'creator');}}catch(e){if(live&&authUserIdRef.current===session.user.id){setProfileReady(false);setNotice(msg(e));}}finally{if(live)setAuthReady(true);}}).catch(e=>{if(live){setAuthReady(true);setProfileReady(true);setNotice(msg(e));}});loadPublic().catch(e=>setNotice('Stories are temporarily unavailable: '+msg(e)));return()=>{live=false;profileRequestRef.current++;subscription.unsubscribe();};},[loadProfile,loadPublic]);
+ useEffect(()=>{
+  let live=true;
+  const clearTimers=()=>{for(const timer of authTimersRef.current)clearTimeout(timer);authTimersRef.current.clear();};
+  const applySignedOut=event=>{
+   authUserIdRef.current=null;profileRequestRef.current++;loadedProfileUserIdRef.current=null;profileLoadUserIdRef.current=null;
+   setUser(null);setProfile(null);setProfileReady(true);setMyPosts([]);setAdmin(null);setView('home');
+   if(event==='SIGNED_OUT')setNotice('Your session has ended. Please sign in again to continue.');
+  };
+  const scheduleProfileLoad=id=>{
+   if(profileLoadUserIdRef.current===id)return;
+   profileLoadUserIdRef.current=id;setProfileReady(false);
+   const timer=setTimeout(()=>{
+    authTimersRef.current.delete(timer);
+    if(!live||authUserIdRef.current!==id){if(profileLoadUserIdRef.current===id)profileLoadUserIdRef.current=null;return;}
+    loadProfile(id).then(p=>{
+     if(live&&authUserIdRef.current===id){setProfileReady(true);setView(p?.role==='OWNER'&&p?.status==='ACTIVE'?'admin':'creator');}
+    }).catch(e=>{
+     if(live&&authUserIdRef.current===id){setProfileReady(false);setNotice(msg(e));}
+    }).finally(()=>{
+     if(profileLoadUserIdRef.current===id)profileLoadUserIdRef.current=null;
+    });
+   },0);
+   authTimersRef.current.add(timer);
+  };
+  const {data:{subscription}}=supabase.auth.onAuthStateChange((event,session)=>{
+   if(event==='PASSWORD_RECOVERY'){setMode('update');setNotice('Choose a new password for your account.');}
+   setAuthReady(true);
+   if(!session?.user){clearTimers();applySignedOut(event);return;}
+   const nextUser=session.user,nextId=nextUser.id,previousId=authUserIdRef.current;
+   if(previousId&&previousId!==nextId){clearTimers();profileRequestRef.current++;loadedProfileUserIdRef.current=null;profileLoadUserIdRef.current=null;setProfile(null);setMyPosts([]);setAdmin(null);}
+   authUserIdRef.current=nextId;setUser(nextUser);
+   // A token refresh changes credentials, not the user's database profile.
+   // Never refetch the profile for a routine refresh when it is already loaded.
+   if(!shouldLoadProfileForAuthEvent(event,nextId,previousId,loadedProfileUserIdRef.current)){
+    if(loadedProfileUserIdRef.current===nextId)setProfileReady(true);
+    return;
+   }
+   scheduleProfileLoad(nextId);
+  });
+  loadPublic().catch(e=>{if(live)setNotice('Stories are temporarily unavailable: '+msg(e));});
+  return()=>{
+   live=false;clearTimers();profileRequestRef.current++;profileLoadUserIdRef.current=null;subscription.unsubscribe();
+  };
+ },[loadProfile,loadPublic]);
  useEffect(()=>{if(authReady&&profileReady&&user&&view==='creator')loadCreator().catch(e=>setNotice(msg(e)));},[authReady,profileReady,user,view,loadCreator]);
  useEffect(()=>{if(authReady&&profileReady&&user&&owner&&view==='admin')loadAdmin().catch(e=>setNotice(msg(e)));},[authReady,profileReady,user,owner,view,loadAdmin]);
  async function authSubmit(e){e.preventDefault();if((mode==='register'||mode==='update')&&!strongPassword(password)){setNotice('Use at least 12 characters with uppercase and lowercase letters, a number and a symbol.');return;}if(mode==='register'&&!termsAccepted){setNotice('Please agree to the Terms & Conditions and Privacy Policy to create an account.');return;}setBusy(true);setNotice('');try{if(mode==='register'){if(name.trim().length<2)throw Error('Enter your display name.');const r=await supabase.auth.signUp({email:email.trim(),password,options:{data:{display_name:name.trim(),terms_version:'2026-11-22',terms_accepted_at:new Date().toISOString()},emailRedirectTo:APP_URL}});if(r.error)throw r.error;setNotice('Registration received. Verify your email. Your creator application will await Super Admin approval.');}else if(mode==='reset'){const r=await supabase.auth.resetPasswordForEmail(email.trim(),{redirectTo:APP_URL});if(r.error)throw r.error;setNotice('If the account exists, a password reset link has been sent.');}else if(mode==='update'){if(!strongPassword(password))throw Error('Use at least 12 characters with uppercase and lowercase letters, a number and a symbol.');const r=await supabase.auth.updateUser({password});if(r.error)throw r.error;setPassword('');setMode('login');setNotice('Password updated. Sign in with your new password.');}else{const r=await supabase.auth.signInWithPassword({email:email.trim(),password});if(r.error)throw r.error;setNotice('Signed in successfully.');}}catch(e){setNotice(authError(e));}finally{setBusy(false);}}
@@ -50,8 +96,8 @@ function App(){
  async function announce(e){e.preventDefault();const f=new FormData(e.currentTarget),r=await supabase.from('bwm_announcements').insert({title:String(f.get('title')).trim(),body:String(f.get('body')).trim(),active:true,created_by:user.id});if(r.error){setNotice(msg(r.error));return;}await audit('ANNOUNCEMENT_PUBLISHED');await loadAdmin();e.currentTarget.reset();setNotice('Announcement published.');}
  async function submitSupport(e){e.preventDefault();const f=new FormData(e.currentTarget),payload={name:String(f.get('name')).trim(),email:String(f.get('email')).trim(),category:String(f.get('category')),message:String(f.get('message')).trim(),status:'OPEN'};if(payload.name.length<2||payload.message.length<10){setNotice('Please provide your name and a message of at least 10 characters.');return;}setBusy(true);try{const r=await supabase.from('bwm_support_requests').insert(payload);if(r.error)throw r.error;e.currentTarget.reset();setNotice('Your help request has been sent to the Super Admin team.');}catch(e){setNotice(msg(e));}finally{setBusy(false);}}
  async function updateSupportStatus(id,status){try{const r=await supabase.from('bwm_support_requests').update({status,updated_at:new Date().toISOString()}).eq('id',id);if(r.error)throw r.error;await loadAdmin();setNotice('Support request updated.');}catch(e){setNotice(msg(e));}}
- const refreshSupport=useCallback(async()=>{const r=await supabase.from('bwm_support_requests').select('*').gte('created_at',new Date(Date.now()-48*60*60*1000).toISOString()).order('created_at',{ascending:false}).limit(500);if(r.error)throw r.error;setAdmin(prev=>prev?{...prev,support:r.data||[]}:prev);},[]);
- useEffect(()=>{if(!authReady||!profileReady||!user||!owner||view!=='admin')return;const timer=setInterval(()=>refreshSupport().catch(()=>{}),30000);return()=>clearInterval(timer);},[authReady,profileReady,user,owner,view,refreshSupport]);
+ const refreshSupport=useCallback(async()=>{const requestUserId=authUserIdRef.current;if(!requestUserId)return;const r=await supabase.from('bwm_support_requests').select('*').gte('created_at',new Date(Date.now()-48*60*60*1000).toISOString()).order('created_at',{ascending:false}).limit(500);if(r.error)throw r.error;if(authUserIdRef.current===requestUserId)setAdmin(prev=>prev?{...prev,support:r.data||[]}:prev);},[]);
+ useEffect(()=>{if(!authReady||!profileReady||!user||!owner||view!=='admin')return;let active=true,timer=null;const poll=async()=>{try{await refreshSupport();}catch(e){if(active)setNotice('Support queue refresh failed: '+msg(e));}finally{if(active)timer=setTimeout(poll,30000);}};timer=setTimeout(poll,30000);return()=>{active=false;if(timer!==null)clearTimeout(timer);};},[authReady,profileReady,user,owner,view,refreshSupport]);
  const pendingCreators=useMemo(()=>admin?.users.filter(x=>x.role==='CREATOR'&&x.approval_status==='PENDING'&&x.email_verified)||[],[admin]),pendingPosts=useMemo(()=>admin?.posts.filter(x=>x.status==='PENDING')||[],[admin]);
  const shown=filter?posts.filter(x=>x.category===filter):posts;
  const home=()=>{history.pushState({},'',new URL('./',APP_URL).pathname);setView('home');setStory(null);scrollTo(0,0);},register=()=>{setMode('register');setView('home');setTimeout(()=>document.getElementById('account')?.scrollIntoView({behavior:'smooth'}),20);},openLegal=doc=>{setLegalDoc(doc);setView('legal');scrollTo(0,0);},openHelp=()=>{setView('help');scrollTo(0,0);};
