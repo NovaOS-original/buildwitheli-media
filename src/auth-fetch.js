@@ -42,6 +42,8 @@ async function isConcurrentRefreshConflict(response) {
 export function createAuthFetch(fetchImpl = globalThis.fetch) {
   if (typeof fetchImpl !== 'function') throw new TypeError('A fetch implementation is required.');
   let recovering = false;
+  let recoveryTimer = null;
+  const clearRecoveryTimer = () => { if (recoveryTimer !== null) { clearTimeout(recoveryTimer); recoveryTimer = null; } };
 
   return async function authSafeFetch(input, init) {
     const refreshRequest = isRefreshRequest(input);
@@ -57,6 +59,14 @@ export function createAuthFetch(fetchImpl = globalThis.fetch) {
         recovering = true;
         notify('recovering');
       }
+      clearRecoveryTimer();
+      // A transient warning must not remain stuck forever if the SDK does not
+      // need another refresh after the failed attempt. Further failures re-emit it.
+      recoveryTimer = setTimeout(() => {
+        recovering = false;
+        recoveryTimer = null;
+        notify('idle');
+      }, 20000);
       const headers = new Headers(response.headers);
       headers.set('content-type', 'application/json');
       return new Response(
@@ -66,6 +76,7 @@ export function createAuthFetch(fetchImpl = globalThis.fetch) {
     }
 
     if (recovering && response.ok) {
+      clearRecoveryTimer();
       recovering = false;
       notify('recovered');
     }
