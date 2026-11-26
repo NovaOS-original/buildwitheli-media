@@ -30,6 +30,10 @@ export function createBrowserAuthLock(lockManager) {
           error.isAcquireTimeout = true;
           throw error;
         }
+        if (timeoutId !== null) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
         return fn();
       });
     } catch (error) {
