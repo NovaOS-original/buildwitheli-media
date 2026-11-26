@@ -86,3 +86,7 @@ a.btn.outline:hover,
 
 /* Help and support */
 .support-form{max-width:680px;margin:26px 0}.support-form select{width:100%;border:1px solid #ffffff2b;background:#080d15;color:#f4f5f2;border-radius:7px;padding:12px;font:inherit;font-size:13px;min-height:45px}.support-form select:focus{outline:1px solid #c6f36b;border-color:#c6f36b}.support-form textarea{min-height:150px}.admin-workspace .queue-item a{color:#c6f36b}
+
+/* Header navigation: reflect the active application view, not anchor focus/visited state. */
+.top nav button.quiet.selected{color:#c6f36b!important;border-bottom:2px solid #c6f36b;padding-bottom:7px}
+.top nav button.quiet:focus-visible{outline:2px solid #c6f36b;outline-offset:5px;border-radius:3px}
