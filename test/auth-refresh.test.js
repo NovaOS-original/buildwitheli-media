@@ -55,6 +55,31 @@ test('Web Locks adapter requests an exclusive lock and runs the protected operat
   assert.equal(result,42);
 });
 
+test('Web Locks adapter serializes operations using the same session key',async()=>{
+  const tails=new Map();
+  const lockManager={request:async(name,_options,callback)=>{
+    const previous=tails.get(name)||Promise.resolve();
+    let release;
+    const next=new Promise(resolve=>{release=resolve;});
+    tails.set(name,previous.then(()=>next));
+    await previous;
+    try{return await callback({name});}finally{release();}
+  }};
+  const lock=createBrowserAuthLock(lockManager);
+  let active=0,maxActive=0,releaseFirst;
+  const firstGate=new Promise(resolve=>{releaseFirst=resolve;});
+  let firstStarted;
+  const started=new Promise(resolve=>{firstStarted=resolve;});
+  const first=lock('shared-auth-key',5000,async()=>{active++;maxActive=Math.max(maxActive,active);firstStarted();await firstGate;active--;});
+  await started;
+  const second=lock('shared-auth-key',5000,async()=>{active++;maxActive=Math.max(maxActive,active);active--;});
+  await Promise.resolve();
+  assert.equal(maxActive,1);
+  releaseFirst();
+  await Promise.all([first,second]);
+  assert.equal(maxActive,1);
+});
+
 test('Web Locks adapter falls back safely when the browser API is unavailable',async()=>{
   const lock=createBrowserAuthLock(null);
   assert.equal(await lock('auth-lock',5000,async()=> 'fallback'), 'fallback');
@@ -66,7 +91,6 @@ test('Web Locks adapter reports an unavailable immediate lock as an acquire time
 });
 
 test('Web Locks adapter converts an acquisition timeout and clears its timer',async()=>{
-  let timerCleared=false;
   const lock=createBrowserAuthLock({
     request:(_name,options)=>new Promise((_resolve,reject)=>options.signal.addEventListener('abort',()=>reject(new DOMException('Aborted','AbortError')),{once:true}))
   });
